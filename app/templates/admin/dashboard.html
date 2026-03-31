@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Admin Dashboard</title>
+</head>
+
+<body>
+
+<h1>Admin Dashboard</h1>
+
+<h2>System Statistics</h2>
+
+<ul>
+    <li>Total Users: {{ stats.total_users }}</li>
+    <li>Total Active Users: {{ stats.active_users }}</li>
+    <li>Total Commissions: {{ stats.total_commissions }}</li>
+    <li>Total Withdraw Requests: {{ stats.withdraw_requests }}</li>
+</ul>
+
+<hr>
+
+<a href="/admin/users">View Users</a>
+<br><br>
+
+<a href="/admin/withdraws">Withdraw Requests</a>
+
+</body>
+
+</html>

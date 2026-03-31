@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Withdraw Requests</title>
+</head>
+
+<body>
+
+<h1>Admin - Withdraw Requests</h1>
+
+<table border="1">
+
+<tr>
+<th>ID</th>
+<th>User ID</th>
+<th>Name</th>
+<th>Phone</th>
+<th>Amount</th>
+<th>Status</th>
+<th>Requested At</th>
+<th>Action</th>
+</tr>
+
+{% for req in requests %}
+
+<tr>
+
+<td>{{ req.id }}</td>
+<td>{{ req.user_id }}</td>
+<td>{{ req.full_name }}</td>
+<td>{{ req.phone }}</td>
+<td>{{ req.amount }}</td>
+<td>{{ req.status }}</td>
+<td>{{ req.requested_at }}</td>
+
+<td>
+
+{% if req.status == "pending" %}
+
+<a href="/admin/withdraw/approve/{{ req.id }}">
+Approve
+</a>
+
+|
+
+<a href="/admin/withdraw/reject/{{ req.id }}">
+Reject
+</a>
+
+{% else %}
+
+Processed
+
+{% endif %}
+
+</td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+
+</body>
+
+</html>

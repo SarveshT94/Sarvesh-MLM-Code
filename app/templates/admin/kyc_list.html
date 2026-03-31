@@ -1,0 +1,34 @@
+<h1>KYC Requests</h1>
+
+<table border="1">
+
+<tr>
+<th>User</th>
+<th>Document</th>
+<th>Number</th>
+<th>Submitted</th>
+<th>Action</th>
+</tr>
+
+{% for k in kyc %}
+
+<tr>
+
+<td>{{ k.full_name }}</td>
+<td>{{ k.document_type }}</td>
+<td>{{ k.document_number }}</td>
+<td>{{ k.submitted_at }}</td>
+
+<td>
+
+<a href="/admin/approve-kyc/{{ k.id }}">Approve</a>
+
+<a href="/admin/reject-kyc/{{ k.id }}">Reject</a>
+
+</td>
+
+</tr>
+
+{% endfor %}
+
+</table>

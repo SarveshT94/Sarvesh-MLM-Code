@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Commission Logs</title>
+</head>
+
+<body>
+
+<h1>Commission Logs</h1>
+
+<table border="1">
+
+<tr>
+<th>ID</th>
+<th>Earner</th>
+<th>From User</th>
+<th>Level</th>
+<th>Amount</th>
+<th>Type</th>
+<th>Date</th>
+</tr>
+
+{% for log in logs %}
+
+<tr>
+
+<td>{{ log.id }}</td>
+<td>{{ log.earner_name }}</td>
+<td>{{ log.from_user_name }}</td>
+<td>{{ log.level }}</td>
+<td>{{ log.amount }}</td>
+<td>{{ log.commission_type }}</td>
+<td>{{ log.created_at }}</td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+
+<br>
+
+<a href="/admin/commission-logs?page={{ page + 1 }}">
+Next Page
+</a>
+
+</body>
+
+</html>
