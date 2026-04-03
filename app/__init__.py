@@ -1,23 +1,33 @@
 import os
-from flask import Flask, render_template
-from flask_login import LoginManager
+from flask import Flask, render_template, request, jsonify
+from flask_login import LoginManager, UserMixin
 from flask_cors import CORS
 
-# Login manager global
+# -----------------------------------
+# Global Extensions
+# -----------------------------------
 login_manager = LoginManager()
 
+# Enterprise Safe User Wrapper for Flask-Login
+# We define it here to prevent circular import crashes from the routes.
+class User(UserMixin):
+    def __init__(self, user_data):
+        self.id = user_data.get('id')
+        self.full_name = user_data.get('full_name')
+        self.email = user_data.get('email')
+        self.role_id = user_data.get('role_id')
 
 def create_app():
-
+    """Enterprise Application Factory"""
     app = Flask(__name__)
 
     # -----------------------------
-    # CONFIG
+    # 1. Configuration
     # -----------------------------
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "supersecretkey")
 
     # -----------------------------
-    # CORS ENABLE
+    # 2. CORS Enable (React/Vue Ready)
     # -----------------------------
     CORS(
         app,
@@ -26,12 +36,14 @@ def create_app():
     )
 
     # -----------------------------
-    # IMPORT BLUEPRINTS
+    # 3. Import Blueprints (Cleaned & Updated)
     # -----------------------------
-    from app.routes.auth import auth_bp
+    # Notice: We use auth_routes as established in Step 11
+    from app.routes.auth_routes import auth_bp 
     from app.routes.main import main
     from app.routes.admin_routes import admin
 
+    # Sub-modules
     from app.routes.admin.tree_routes import admin_tree_bp
     from app.routes.admin.wallet_routes import admin_wallet_bp
     from app.routes.admin.commission_routes import admin_commission_bp
@@ -45,49 +57,26 @@ def create_app():
     from app.routes.admin.backup_routes import admin_backup_bp
 
     # -----------------------------
-    # REGISTER BLUEPRINTS
+    # 4. Register Blueprints (Deduplicated)
     # -----------------------------
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
-    # 👤 USER / MAIN
     app.register_blueprint(main, url_prefix="/api")
-
-    # 🧑‍💼 ADMIN CORE
+    
     app.register_blueprint(admin, url_prefix="/api/admin")
-
-    # 🌳 MLM TREE
     app.register_blueprint(admin_tree_bp, url_prefix="/api/admin/tree")
-
-    # 💰 WALLET
     app.register_blueprint(admin_wallet_bp, url_prefix="/api/admin/wallet")
-
-    # 💸 COMMISSION
     app.register_blueprint(admin_commission_bp, url_prefix="/api/admin/commission")
-
-    # 🚨 FRAUD
     app.register_blueprint(admin_fraud_bp, url_prefix="/api/admin/fraud")
-
-    # 📜 ACTIVITY LOGS
     app.register_blueprint(admin_activity_bp, url_prefix="/api/admin/activity")
-
-    # ⏰ CRON
     app.register_blueprint(admin_cron_bp, url_prefix="/api/admin/cron")
-
-    # 📊 ANALYTICS
     app.register_blueprint(admin_analytics_bp, url_prefix="/api/admin/analytics")
-
-    # 🔔 NOTIFICATIONS
     app.register_blueprint(notification_bp, url_prefix="/api/notifications")
-
-    # 🎫 SUPPORT (USER)
     app.register_blueprint(support_bp, url_prefix="/api/support")
-
-    # 🎫 SUPPORT (ADMIN)
     app.register_blueprint(admin_support_bp, url_prefix="/api/admin/support")
-
-    # 💾 BACKUPS
     app.register_blueprint(admin_backup_bp, url_prefix="/api/admin/backup")
+
     # -----------------------------
-    # LOGIN MANAGER SETUP
+    # 5. Login Manager Setup
     # -----------------------------
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
@@ -95,22 +84,31 @@ def create_app():
 
     @login_manager.user_loader
     def load_user(user_id):
-        from app.services.user_service import get_user_by_id
-        user_data = get_user_by_id(user_id)
-        if user_data:
-            from app.routes.auth import User
-            return User(user_data)
+        # Localized import prevents the app from crashing on startup
+        from app.db import get_cursor
+        
+        with get_cursor() as cur:
+            cur.execute("SELECT id, full_name, email, role_id FROM users WHERE id = %s", (user_id,))
+            user_data = cur.fetchone()
+            
+            if user_data:
+                return User(user_data)
         return None
 
     # -----------------------------
-    # ERROR HANDLERS
+    # 6. Smart Error Handlers
     # -----------------------------
     @app.errorhandler(404)
     def page_not_found(e):
+        # If it's an API request, return JSON. Otherwise, return HTML template.
+        if request.path.startswith('/api/'):
+            return jsonify({"status": "error", "message": "API Endpoint Not Found"}), 404
         return render_template("errors/404.html"), 404
 
     @app.errorhandler(500)
     def internal_server_error(e):
+        if request.path.startswith('/api/'):
+            return jsonify({"status": "error", "message": "Internal Server Error"}), 500
         return render_template("errors/500.html"), 500
 
     return app

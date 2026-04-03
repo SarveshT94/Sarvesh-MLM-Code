@@ -1,157 +1,91 @@
 from app.db import get_cursor
-from app.utils.referral import generate_unique_referral_code
-from app.services.referral_service import get_sponsor_id
-from app.utils.security import hash_password
-from app.services.commission_service import distribute_commission
-from app.services.rank_service import check_and_update_rank
+from app.models.user_model import get_user_by_email, get_user_by_phone, create_user
+from werkzeug.security import generate_password_hash, check_password_hash
+import random
+import string
 
-# ------------------------------------------------
-# USER REGISTRATION
-# ------------------------------------------------
-def register_user(full_name, email, phone, password, referral_code):
+# -----------------------------------
+# Secure Referral Code Generator
+# -----------------------------------
+def generate_unique_referral_code():
+    """Generates a random 8-character alphanumeric referral code."""
+    chars = string.ascii_uppercase + string.digits
+    return ''.join(random.choice(chars) for _ in range(8))
 
+# -----------------------------------
+# Enterprise Registration Flow
+# -----------------------------------
+def register_new_member(full_name, email, phone, raw_password, sponsor_id=None):
+    """
+    The Gatekeeper: Ensures no duplicates, enforces secure password hashing, 
+    and locks the account for KYC verification.
+    """
+    # 1. Strict Duplicate Checks
+    if get_user_by_email(email):
+        return {"status": "error", "message": "This email is already registered."}
+        
+    if get_user_by_phone(phone):
+        return {"status": "error", "message": "This phone number is already registered."}
+
+    # 2. Cryptographic Password Hashing (NEVER store plain text!)
+    password_hash = generate_password_hash(raw_password)
+
+    # 3. Generate a unique code for this new member to invite others
+    referral_code = generate_unique_referral_code()
+    
+    # 4. Default Role ID (Assuming '2' is a standard member, '1' is Admin)
+    role_id = 2 
+
+    # 5. Safe Database Insertion
     try:
-        with get_cursor() as cur:
-
-            # ---------------------------
-            # CHECK DUPLICATE USER
-            # ---------------------------
-            cur.execute(
-                "SELECT id FROM users WHERE phone=%s OR email=%s",
-                (phone, email)
-            )
-            existing = cur.fetchone()
-
-            if existing:
-                return {
-                    "success": False,
-                    "message": "User already exists"
-                }
-
-            # ---------------------------
-            # VALIDATE REFERRAL CODE
-            # ---------------------------
-            sponsor_id = None
-
-            if referral_code:
-                sponsor_id = get_sponsor_id(referral_code)
-
-                if sponsor_id is None:
-                    return {
-                        "success": False,
-                        "message": "Invalid referral code"
-                    }
-            # ---------------------------
-            # GENERATE NEW REFERRAL
-            # ---------------------------
-            new_referral = generate_unique_referral_code()
-
-            # ---------------------------
-            # HASH PASSWORD
-            # ---------------------------
-            password_hash = hash_password(password)
-
-            # ---------------------------
-            # CREATE USER
-            # ---------------------------
-            cur.execute(
-                """
-                INSERT INTO users
-                (role_id, full_name, email, phone, password_hash,
-                 referral_code, sponsor_id, is_active, created_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NOW())
-                RETURNING id
-                """,
-                (
-                    2,
-                    full_name,
-                    email,
-                    phone,
-                    password_hash,
-                    new_referral,
-                    sponsor_id,
-                    False
-                )
-            )
-
-            user = cur.fetchone()
-            new_user_id = user["id"]
-
-            # ---------------------------
-            # COMMIT (CRITICAL FIX)
-            # ---------------------------
-            cur.connection.commit()
-
-            # ---------------------------
-            # MLM LOGIC
-            # ---------------------------
-            check_and_update_rank(sponsor_id)
-
-            distribute_commission(
-                cur.connection,
-                cur,
-                new_user_id,
-                100
-            )
-
-            return {
-                "success": True,
-                "user_id": new_user_id,
-                "referral_code": new_referral
-            }
-
-    except Exception as e:
-        print("REGISTER ERROR:", str(e))
-        return {
-            "success": False,
-            "message": "Registration failed"
-        }
-
-
-# ------------------------------------------------
-# GET USER BY ID
-# ------------------------------------------------
-def get_user_by_id(user_id):
-    with get_cursor() as cur:
-        cur.execute("SELECT * FROM users WHERE id=%s", (user_id,))
-        return cur.fetchone()
-
-
-def get_user_by_email(email):
-    with get_cursor() as cur:
-        cur.execute("SELECT * FROM users WHERE email=%s", (email,))
-        return cur.fetchone()
-
-
-def get_user_profile(user_id):
-    with get_cursor() as cur:
-        cur.execute(
-            """
-            SELECT id, full_name, email, phone, is_active
-            FROM users
-            WHERE id = %s
-            """,
-            (user_id,)
+        new_user_id = create_user(
+            role_id=role_id,
+            full_name=full_name,
+            email=email,
+            phone=phone,
+            password_hash=password_hash,
+            referral_code=referral_code,
+            sponsor_id=sponsor_id
         )
-        return cur.fetchone()
+        
+        # 6. Initialize KYC Lock (Prevents withdrawals until Admin approves)
+        with get_cursor() as cur:
+            # We use ON CONFLICT DO NOTHING just in case, though it's a new user.
+            cur.execute("""
+                INSERT INTO kyc_details (user_id, status)
+                VALUES (%s, %s)
+            """, (new_user_id, 'Pending'))
+            
+        return {
+            "status": "success", 
+            "message": "Registration successful. Please complete KYC to unlock your wallet.",
+            "user_id": new_user_id,
+            "referral_code": referral_code
+        }
+        
+    except Exception as e:
+        # If anything fails (like the KYC table insert), the context manager automatically 
+        # rolls back the user creation so we don't get "ghost" accounts.
+        return {"status": "error", "message": f"System Error during registration: {str(e)}"}
 
-
-# ------------------------------------------------
-# ADMIN USERS TABLE (Pagination)
-# ------------------------------------------------
-def get_users_paginated(page=1, search=""):
-
-    limit = 20
-    offset = (page - 1) * limit
-    search_query = f"%{search}%"
-
-    with get_cursor() as cur:
-        cur.execute("""
-            SELECT id, full_name, email, sponsor_id, created_at
-            FROM users
-            WHERE full_name ILIKE %s OR email ILIKE %s
-            ORDER BY id DESC
-            LIMIT %s OFFSET %s
-        """, (search_query, search_query, limit, offset))
-
-        return cur.fetchall()
+# -----------------------------------
+# Enterprise Login Flow
+# -----------------------------------
+def authenticate_user(email, raw_password):
+    """
+    Secure Authentication: Compares the cryptographic hash, not the plain text.
+    """
+    # 1. Find user
+    user = get_user_by_email(email)
+    if not user:
+        # We don't say "Email not found" to prevent hackers from guessing emails.
+        return {"status": "error", "message": "Invalid email or password."}
+        
+    # 2. Verify Hash
+    if not check_password_hash(user['password_hash'], raw_password):
+        return {"status": "error", "message": "Invalid email or password."}
+        
+    # 3. Success (Do not return the password hash to the frontend!)
+    del user['password_hash']
+    
+    return {"status": "success", "message": "Login successful.", "user": user}

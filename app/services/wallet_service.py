@@ -1,149 +1,85 @@
-from app.db import get_db_connection
+from app.db import get_cursor
+from decimal import Decimal
 
-
+# -----------------------------------
+# Get Exact Wallet Balance
+# -----------------------------------
 def get_wallet_balance(user_id):
     """
-    Calculate wallet balance from ledger
+    Enterprise Standard: Calculates real balance dynamically from the ledger.
+    Never rely on a single 'balance' column that can be easily manipulated.
     """
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    try:
-
+    with get_cursor() as cur:
+        # Sum all credits and subtract all debits. COALESCE ensures we don't get 'None' errors.
         cur.execute("""
-            SELECT COALESCE(SUM(amount),0) as balance
+            SELECT 
+                COALESCE(SUM(CASE WHEN transaction_type LIKE '%%credit%%' THEN amount ELSE 0 END), 0) as total_in,
+                COALESCE(SUM(CASE WHEN transaction_type LIKE '%%debit%%' THEN amount ELSE 0 END), 0) as total_out
             FROM wallet_ledger
             WHERE user_id = %s
         """, (user_id,))
-
+        
         result = cur.fetchone()
+        total_in = Decimal(str(result['total_in']))
+        total_out = Decimal(str(result['total_out']))
+        
+        return total_in - total_out
 
-        return result["balance"]
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-def get_wallet_history(user_id, limit=50):
+# -----------------------------------
+# Process Safe Withdrawal Request
+# -----------------------------------
+def request_withdrawal(user_id, amount):
     """
-    Fetch wallet transaction history
+    Safely processes a withdrawal request ensuring no overdrafts or 
+    double-click race conditions.
     """
+    requested_amount = Decimal(str(amount))
+    
+    if requested_amount <= 0:
+        return {"status": "error", "message": "Withdrawal amount must be greater than zero."}
 
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    try:
-
+    with get_cursor() as cur:
+        # 1. Row-Level Locking (Enterprise Anti-Fraud)
+        # Locks the user row for milliseconds so they can't double-click and bypass the balance check
+        cur.execute("SELECT id FROM users WHERE id = %s FOR UPDATE", (user_id,))
+        
+        # 2. Get true balance
         cur.execute("""
-            SELECT
-                id,
-                transaction_type,
-                amount,
-                reference_id,
-                description,
-                created_at
-            FROM wallet_ledger
-            WHERE user_id = %s
-            ORDER BY created_at DESC
-            LIMIT %s
-        """, (user_id, limit))
-
-        rows = cur.fetchall()
-
-        return rows
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-def credit_wallet(user_id, amount, reference_id, description):
-    """
-    Credit wallet balance
-    """
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    try:
-
-        cur.execute("""
-            INSERT INTO wallet_ledger
-            (user_id, transaction_type, amount, reference_id, description, created_at)
-            VALUES (%s,%s,%s,%s,%s,NOW())
-        """, (
-            user_id,
-            "manual_credit",
-            amount,
-            reference_id,
-            description
-        ))
-
-        conn.commit()
-
-        return True
-
-    except Exception as e:
-
-        conn.rollback()
-        raise e
-
-    finally:
-
-        cur.close()
-        conn.close()
-
-
-def debit_wallet(user_id, amount, reference_id, description):
-    """
-    Debit wallet balance
-    """
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    try:
-
-        # check balance
-        cur.execute("""
-            SELECT COALESCE(SUM(amount),0) as balance
+            SELECT 
+                COALESCE(SUM(CASE WHEN transaction_type LIKE '%%credit%%' THEN amount ELSE 0 END), 0) as total_in,
+                COALESCE(SUM(CASE WHEN transaction_type LIKE '%%debit%%' THEN amount ELSE 0 END), 0) as total_out
             FROM wallet_ledger
             WHERE user_id = %s
         """, (user_id,))
-
-        balance = cur.fetchone()["balance"]
-
-        if balance < amount:
-            raise Exception("Insufficient wallet balance")
-
-        debit_amount = -abs(amount)
-
+        
+        result = cur.fetchone()
+        balance = Decimal(str(result['total_in'])) - Decimal(str(result['total_out']))
+        
+        # 3. Check for sufficient funds
+        if balance < requested_amount:
+            return {"status": "error", "message": f"Insufficient funds. Current balance: {balance}"}
+            
+        # 4. Create the Ledger Debit (Locks the money so it can't be spent elsewhere)
         cur.execute("""
             INSERT INTO wallet_ledger
-            (user_id, transaction_type, amount, reference_id, description, created_at)
-            VALUES (%s,%s,%s,%s,%s,NOW())
+            (user_id, amount, transaction_type, reference)
+            VALUES (%s, %s, %s, %s)
         """, (
-            user_id,
-            "withdrawal_debit",
-            debit_amount,
-            reference_id,
-            description
+            user_id, 
+            requested_amount, 
+            "withdrawal_debit", 
+            "Pending Admin Approval"
         ))
-
-        conn.commit()
-
-        return True
-
-    except Exception as e:
-
-        conn.rollback()
-        raise e
-
-    finally:
-
-        cur.close()
-        conn.close()
+        
+        # 5. Send to Admin Dashboard for final review/payout
+        cur.execute("""
+            INSERT INTO withdraw_requests
+            (user_id, amount, status)
+            VALUES (%s, %s, %s)
+        """, (
+            user_id, 
+            requested_amount, 
+            "Pending"
+        ))
+        
+        return {"status": "success", "message": "Withdrawal requested successfully."}
