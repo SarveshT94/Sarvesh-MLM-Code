@@ -82,3 +82,24 @@ def deactivate_package(package_id):
             WHERE id = %s
         """, (package_id,))
         return True
+
+
+# -----------------------------------
+# Purchase a Package
+# -----------------------------------
+def purchase_package(user_id, package_id):
+    """
+    Enterprise API: Processes a user's package purchase.
+    (This is a safe placeholder so your server can boot up. We will connect 
+    this to the commission engine and wallet later).
+    """
+    package = get_package_by_id(package_id)
+    
+    if not package:
+        return {"success": False, "message": "Package not found."}
+        
+    return {
+        "success": True,
+        "purchase_id": 999, # Placeholder ID
+        "amount": package['price']
+    }

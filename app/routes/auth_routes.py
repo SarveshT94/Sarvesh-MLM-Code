@@ -1,8 +1,19 @@
 from flask import Blueprint, request, jsonify, session
+from flask_login import login_user, logout_user, UserMixin
 from app.services.user_service import register_new_member, authenticate_user
 
 # Create the "Blueprint" which tells Flask these are the Auth URLs
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
+
+# --- Enterprise Flask-Login Wrapper ---
+# Flask-Login requires a class object to manage sessions securely. 
+# We create a fast, lightweight wrapper for your raw database dictionary here.
+class AuthUser(UserMixin):
+    def __init__(self, user_dict):
+        self.id = str(user_dict['id']) # Flask-Login strictly requires the ID to be a string
+        self.role_id = user_dict.get('role_id', 2)
+        self.full_name = user_dict.get('full_name', '')
+        self.email = user_dict.get('email', '')
 
 # -----------------------------------
 # Secure Registration Route
@@ -31,11 +42,10 @@ def register():
         sponsor_id=sponsor_id
     )
 
-    # 3. Return Standardized HTTP Status Codes
     if result['status'] == 'success':
-        return jsonify(result), 201 # 201 means "Created successfully"
+        return jsonify(result), 201 
     else:
-        return jsonify(result), 400 # 400 means "Bad Request" (e.g., email exists)
+        return jsonify(result), 400 
 
 # -----------------------------------
 # Secure Login Route
@@ -43,40 +53,44 @@ def register():
 @auth_bp.route('/login', methods=['POST'])
 def login():
     """
-    Enterprise API: Verifies credentials and creates a secure Server-Side Session.
+    Enterprise API: Verifies credentials and officially logs the user into the Flask Server.
     Endpoint: POST /api/auth/login
     """
     data = request.get_json()
 
-    # 1. Validate Input
     if not data or not data.get('email') or not data.get('password'):
         return jsonify({"status": "error", "message": "Email and password are required."}), 400
 
-    # 2. Authenticate via Service
+    # 1. Authenticate via your flawless Service
     result = authenticate_user(data['email'], data['password'])
 
     if result['status'] == 'success':
-        user = result['user']
-        
-        # 3. Create a secure session (Stores an encrypted cookie on the user's browser)
-        session['user_id'] = user['id']
-        session['role_id'] = user['role_id']
+        user_dict = result['user']
 
-        # 4. Filter the data (NEVER send the whole database row back to the front-end)
+        # 2. Enterprise Security: Log them into Flask-Login
+        # This creates the encrypted, HttpOnly cookie automatically!
+        user_obj = AuthUser(user_dict)
+        login_user(user_obj)
+
+        # (Optional) Keep manual session for legacy routes that haven't been upgraded yet
+        session['user_id'] = user_dict['id']
+        session['role_id'] = user_dict['role_id']
+
+        # 3. Filter the data (Never send the whole database row back)
         safe_user_data = {
-            "id": user['id'],
-            "full_name": user['full_name'],
-            "email": user['email'],
-            "role_id": user['role_id']
+            "id": user_dict['id'],
+            "full_name": user_dict['full_name'],
+            "email": user_dict['email'],
+            "role_id": user_dict['role_id']
         }
-        
+
         return jsonify({
-            "status": "success", 
-            "message": "Login successful", 
+            "status": "success",
+            "message": "Login successful",
             "user": safe_user_data
         }), 200
     else:
-        return jsonify(result), 401 # 401 means "Unauthorized"
+        return jsonify(result), 401 
 
 # -----------------------------------
 # Secure Logout Route
@@ -84,8 +98,9 @@ def login():
 @auth_bp.route('/logout', methods=['POST', 'GET'])
 def logout():
     """
-    Enterprise API: Destroys the secure session.
+    Enterprise API: Safely destroys both Flask-Login and legacy sessions.
     Endpoint: POST /api/auth/logout
     """
-    session.clear() # Wipes the user's secure cookie
+    logout_user()  # Destroys the Flask-Login secure cookie
+    session.clear() # Wipes any legacy session data
     return jsonify({"status": "success", "message": "Logged out successfully."}), 200
