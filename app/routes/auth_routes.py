@@ -1,106 +1,153 @@
 from flask import Blueprint, request, jsonify, session
 from flask_login import login_user, logout_user, UserMixin
 from app.services.user_service import register_new_member, authenticate_user
+import logging
+from app import limiter
 
-# Create the "Blueprint" which tells Flask these are the Auth URLs
+# Logger setup
+logger = logging.getLogger(__name__)
+
+# Create the "Blueprint"
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
+
 # --- Enterprise Flask-Login Wrapper ---
-# Flask-Login requires a class object to manage sessions securely. 
-# We create a fast, lightweight wrapper for your raw database dictionary here.
 class AuthUser(UserMixin):
     def __init__(self, user_dict):
-        self.id = str(user_dict['id']) # Flask-Login strictly requires the ID to be a string
+        self.id = str(user_dict['id'])
         self.role_id = user_dict.get('role_id', 2)
         self.full_name = user_dict.get('full_name', '')
         self.email = user_dict.get('email', '')
+
 
 # -----------------------------------
 # Secure Registration Route
 # -----------------------------------
 @auth_bp.route('/register', methods=['POST'])
 def register():
-    """
-    Enterprise API: Validates incoming web data before sending it to the Gatekeeper.
-    Endpoint: POST /api/auth/register
-    """
-    data = request.get_json()
+    try:
+        data = request.get_json()
 
-    # 1. Strict Input Validation (Traffic Cop)
-    required_fields = ['full_name', 'email', 'phone', 'password']
-    if not data or not all(field in data for field in required_fields):
-        return jsonify({"status": "error", "message": "Missing required fields."}), 400
+        # ✅ Strict Input Validation
+        required_fields = ['full_name', 'email', 'phone', 'password']
+        if not data or not all(field in data for field in required_fields):
+            return jsonify({
+                "status": "error",
+                "message": "Missing required fields."
+            }), 400
 
-    sponsor_id = data.get('sponsor_id') # Sponsor is optional for the top company account
+        sponsor_id = data.get('sponsor_id')
 
-    # 2. Process via our Secure Service
-    result = register_new_member(
-        full_name=data['full_name'],
-        email=data['email'],
-        phone=data['phone'],
-        raw_password=data['password'],
-        sponsor_id=sponsor_id
-    )
+        # ✅ Call Service Layer
+        result = register_new_member(
+            full_name=data['full_name'],
+            email=data['email'],
+            phone=data['phone'],
+            raw_password=data['password'],
+            sponsor_id=sponsor_id
+        )
 
-    if result['status'] == 'success':
-        return jsonify(result), 201 
-    else:
-        return jsonify(result), 400 
+        if result['status'] == 'success':
+            logger.info(f"User registered: {data['email']}")
+            return jsonify(result), 201
+        else:
+            logger.warning(f"Registration failed: {result}")
+            return jsonify(result), 400
+
+    except Exception as e:
+        logger.error(f"Registration error: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": "Internal server error"
+        }), 500
+
 
 # -----------------------------------
 # Secure Login Route
 # -----------------------------------
 @auth_bp.route('/login', methods=['POST'])
+@limiter.limit("5 per minute")
 def login():
-    """
-    Enterprise API: Verifies credentials and officially logs the user into the Flask Server.
-    Endpoint: POST /api/auth/login
-    """
-    data = request.get_json()
+    try:
+        data = request.get_json()
 
-    if not data or not data.get('email') or not data.get('password'):
-        return jsonify({"status": "error", "message": "Email and password are required."}), 400
+        # ✅ Input Validation
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "No input data provided."
+            }), 400
 
-    # 1. Authenticate via your flawless Service
-    result = authenticate_user(data['email'], data['password'])
+        email = data.get('email')
+        password = data.get('password')
 
-    if result['status'] == 'success':
-        user_dict = result['user']
+        if not email or not password:
+            return jsonify({
+                "status": "error",
+                "message": "Email and password are required."
+            }), 400
 
-        # 2. Enterprise Security: Log them into Flask-Login
-        # This creates the encrypted, HttpOnly cookie automatically!
-        user_obj = AuthUser(user_dict)
-        login_user(user_obj)
+        # ✅ Authenticate via Service
+        result = authenticate_user(email, password)
 
-        # (Optional) Keep manual session for legacy routes that haven't been upgraded yet
-        session['user_id'] = user_dict['id']
-        session['role_id'] = user_dict['role_id']
+        if result['status'] == 'success':
+            user_dict = result['user']
 
-        # 3. Filter the data (Never send the whole database row back)
-        safe_user_data = {
-            "id": user_dict['id'],
-            "full_name": user_dict['full_name'],
-            "email": user_dict['email'],
-            "role_id": user_dict['role_id']
-        }
+            # ✅ Flask-Login session
+            user_obj = AuthUser(user_dict)
+            login_user(user_obj)
 
+            # ✅ Legacy session (kept for compatibility)
+            session['user_id'] = user_dict['id']
+            session['role_id'] = user_dict['role_id']
+
+            # ✅ Safe response data
+            safe_user_data = {
+                "id": user_dict['id'],
+                "full_name": user_dict.get('full_name', ''),
+                "email": user_dict.get('email', ''),
+                "role_id": user_dict.get('role_id', 2)
+            }
+
+            logger.info(f"User logged in: {email}")
+
+            return jsonify({
+                "status": "success",
+                "message": "Login successful",
+                "user": safe_user_data
+            }), 200
+
+        else:
+            logger.warning(f"Failed login attempt: {email}")
+            return jsonify(result), 401
+
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
         return jsonify({
-            "status": "success",
-            "message": "Login successful",
-            "user": safe_user_data
-        }), 200
-    else:
-        return jsonify(result), 401 
+            "status": "error",
+            "message": "Internal server error"
+        }), 500
+
 
 # -----------------------------------
 # Secure Logout Route
 # -----------------------------------
 @auth_bp.route('/logout', methods=['POST', 'GET'])
 def logout():
-    """
-    Enterprise API: Safely destroys both Flask-Login and legacy sessions.
-    Endpoint: POST /api/auth/logout
-    """
-    logout_user()  # Destroys the Flask-Login secure cookie
-    session.clear() # Wipes any legacy session data
-    return jsonify({"status": "success", "message": "Logged out successfully."}), 200
+    try:
+        logout_user()
+        session.clear()
+
+        logger.info("User logged out")
+
+        return jsonify({
+            "status": "success",
+            "message": "Logged out successfully."
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Logout error: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": "Logout failed"
+        }), 500

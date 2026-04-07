@@ -1,18 +1,18 @@
 from functools import wraps
-from flask import session, jsonify
+from flask import jsonify
+from flask_login import current_user
 
 
 # -------------------------------
-# Login Required (for all users)
+# API Login Required (Flask-Login based)
 # -------------------------------
-def login_required(f):
-
+def login_required_api(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
 
-        if "user_id" not in session:
+        if not current_user.is_authenticated:
             return jsonify({
-                "success": False,
+                "status": "error",
                 "message": "Login required"
             }), 401
 
@@ -22,23 +22,22 @@ def login_required(f):
 
 
 # -------------------------------
-# Admin Required (for admin APIs)
+# Admin Required (API)
 # -------------------------------
-def admin_required(f):
-
+def admin_required_api(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
 
-        if "user_id" not in session:
+        if not current_user.is_authenticated:
             return jsonify({
-                "success": False,
+                "status": "error",
                 "message": "Login required"
             }), 401
 
-        # check admin role
-        if session.get("role") != "admin":
+        # role_id = 1 → admin
+        if getattr(current_user, "role_id", None) != 1:
             return jsonify({
-                "success": False,
+                "status": "error",
                 "message": "Admin access required"
             }), 403
 

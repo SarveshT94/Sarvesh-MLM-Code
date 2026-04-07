@@ -1,49 +1,78 @@
 import os
+import logging
 from flask import Flask, render_template, request, jsonify
 from flask_login import LoginManager, UserMixin
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_talisman import Talisman
 
 # -----------------------------------
-# Global Extensions
+# Logging Configuration
+# -----------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+
+logger = logging.getLogger(__name__)
+
+# -----------------------------------
+# Global Extensions (IMPORTANT)
 # -----------------------------------
 login_manager = LoginManager()
 
-# Enterprise Safe User Wrapper for Flask-Login
-# We define it here to prevent circular import crashes from the routes.
+# ✅ MAKE LIMITER GLOBAL (IMPORTANT)
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
+
+# -----------------------------------
+# Enterprise User Wrapper
+# -----------------------------------
 class User(UserMixin):
     def __init__(self, user_data):
-        self.id = user_data.get('id')
+        self.id = str(user_data.get('id'))
         self.full_name = user_data.get('full_name')
         self.email = user_data.get('email')
         self.role_id = user_data.get('role_id')
 
+
+# -----------------------------------
+# Application Factory
+# -----------------------------------
 def create_app():
-    """Enterprise Application Factory"""
     app = Flask(__name__)
 
     # -----------------------------
     # 1. Configuration
     # -----------------------------
-    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "supersecretkey")
+    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
+
+    if not app.config["SECRET_KEY"]:
+        raise ValueError("SECRET_KEY is not set in environment variables")
 
     # -----------------------------
-    # 2. CORS Enable (React/Vue Ready)
+    # 2. Init Extensions
     # -----------------------------
+    limiter.init_app(app)   # ✅ correct way
+
+    Talisman(app)           # ✅ security headers
+
     CORS(
         app,
-        resources={r"/api/*": {"origins": "http://localhost:3000"}},
+        resources={r"/api/*": {"origins": ["http://localhost:3000"]}},
         supports_credentials=True
     )
 
     # -----------------------------
-    # 3. Import Blueprints (Cleaned & Updated)
+    # 3. Register Blueprints
     # -----------------------------
-    # Notice: We use auth_routes as established in Step 11
-    from app.routes.auth_routes import auth_bp 
+    from app.routes.auth_routes import auth_bp
     from app.routes.main import main
     from app.routes.admin_routes import admin
 
-    # Sub-modules
     from app.routes.admin.tree_routes import admin_tree_bp
     from app.routes.admin.wallet_routes import admin_wallet_bp
     from app.routes.admin.commission_routes import admin_commission_bp
@@ -56,12 +85,9 @@ def create_app():
     from app.routes.admin.support_routes import admin_support_bp
     from app.routes.admin.backup_routes import admin_backup_bp
 
-    # -----------------------------
-    # 4. Register Blueprints (Deduplicated)
-    # -----------------------------
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(main, url_prefix="/api")
-    
+
     app.register_blueprint(admin, url_prefix="/api/admin")
     app.register_blueprint(admin_tree_bp, url_prefix="/api/admin/tree")
     app.register_blueprint(admin_wallet_bp, url_prefix="/api/admin/wallet")
@@ -76,39 +102,52 @@ def create_app():
     app.register_blueprint(admin_backup_bp, url_prefix="/api/admin/backup")
 
     # -----------------------------
-    # 5. Login Manager Setup
+    # 4. Login Manager
     # -----------------------------
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
-    login_manager.login_message_category = "info"
 
     @login_manager.user_loader
     def load_user(user_id):
-        # Localized import prevents the app from crashing on startup
-        from app.db import get_cursor
-        
-        with get_cursor() as cur:
-            cur.execute("SELECT id, full_name, email, role_id FROM users WHERE id = %s", (user_id,))
-            user_data = cur.fetchone()
-            
-            if user_data:
-                return User(user_data)
+        try:
+            from app.db import get_cursor
+
+            with get_cursor() as cur:
+                cur.execute(
+                    "SELECT id, full_name, email, role_id FROM users WHERE id = %s",
+                    (user_id,)
+                )
+                user_data = cur.fetchone()
+
+                if user_data:
+                    return User(user_data)
+
+        except Exception as e:
+            logger.error(f"user_loader error: {str(e)}")
+
         return None
 
     # -----------------------------
-    # 6. Smart Error Handlers
+    # 5. Error Handlers
     # -----------------------------
     @app.errorhandler(404)
     def page_not_found(e):
-        # If it's an API request, return JSON. Otherwise, return HTML template.
         if request.path.startswith('/api/'):
-            return jsonify({"status": "error", "message": "API Endpoint Not Found"}), 404
+            return jsonify({
+                "status": "error",
+                "message": "API Endpoint Not Found"
+            }), 404
         return render_template("errors/404.html"), 404
 
     @app.errorhandler(500)
     def internal_server_error(e):
+        logger.error(f"500 error: {str(e)}")
+
         if request.path.startswith('/api/'):
-            return jsonify({"status": "error", "message": "Internal Server Error"}), 500
+            return jsonify({
+                "status": "error",
+                "message": "Internal Server Error"
+            }), 500
         return render_template("errors/500.html"), 500
 
     return app

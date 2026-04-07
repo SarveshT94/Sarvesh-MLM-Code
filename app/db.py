@@ -3,21 +3,25 @@ from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from contextlib import contextmanager
 from app.config import Config
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Enterprise Connection Pool (Global Singleton)
 _connection_pool = None
 
+
 def init_db_pool():
     """
-    Creates a pool of permanent, reusable database connections.
-    Prevents server crashing under heavy user traffic.
+    Initializes a reusable connection pool.
     """
     global _connection_pool
+
     if _connection_pool is None:
         try:
             _connection_pool = psycopg2.pool.ThreadedConnectionPool(
                 minconn=1,
-                maxconn=20,  # Allows thousands of users to comfortably share 20 active connections
+                maxconn=20,
                 dbname=Config.DB_NAME,
                 user=Config.DB_USER,
                 password=Config.DB_PASSWORD,
@@ -25,43 +29,61 @@ def init_db_pool():
                 port=Config.DB_PORT,
                 connect_timeout=5
             )
-            print("✅ Enterprise Database Pool Initialized.")
+            logger.info("Database connection pool initialized.")
+
         except Exception as e:
-            print("❌ Database Pool Initialization Error:", str(e))
+            logger.error(f"Database pool initialization error: {str(e)}")
             raise
+
+
+def close_db_pool():
+    """
+    Gracefully closes all connections (use during app shutdown).
+    """
+    global _connection_pool
+
+    if _connection_pool:
+        _connection_pool.closeall()
+        logger.info("Database connection pool closed.")
+
 
 @contextmanager
 def get_cursor():
     """
-    Production-safe cursor manager using Connection Pooling.
-    - Borrows a connection from the pool.
-    - Uses RealDictCursor (returns dict instead of tuple).
-    - Auto-commits on success, Auto-rollbacks on error.
-    - Safely returns the connection to the pool.
+    Enterprise-safe DB cursor manager:
+    - Uses connection pooling
+    - Returns dict rows
+    - Auto commit / rollback
     """
     global _connection_pool
-    
-    # Ensure the pool is running
+
     if _connection_pool is None:
         init_db_pool()
 
-    # Borrow a connection from the pool
-    conn = _connection_pool.getconn()
-    
+    conn = None
+    cursor = None
+
     try:
+        # Borrow connection
+        conn = _connection_pool.getconn()
+
+        # Create cursor
         cursor = conn.cursor(cursor_factory=RealDictCursor)
+
         yield cursor
-        
-        # Commit only after successful execution
+
+        # Commit after success
         conn.commit()
 
     except Exception as e:
-        # If anything fails, rollback to protect data integrity
-        conn.rollback()
-        print("❌ Database Transaction Error:", str(e))
+        if conn:
+            conn.rollback()
+        logger.error(f"Database transaction error: {str(e)}")
         raise
 
     finally:
-        # Always clean up and return the connection to the pool for the next user
-        cursor.close()
-        _connection_pool.putconn(conn)
+        # Cleanup safely
+        if cursor:
+            cursor.close()
+        if conn:
+            _connection_pool.putconn(conn)
