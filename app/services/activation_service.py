@@ -1,4 +1,4 @@
-from app.db import get_db_connection
+from app.db import get_cursor
 from app.services.commission_service import distribute_commission
 
 

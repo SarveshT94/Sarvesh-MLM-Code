@@ -1,6 +1,26 @@
+# -----------------------------------
+# 1. Standard Library
+# -----------------------------------
 import os
 import logging
+
+# -----------------------------------
+# 2. Environment
+# -----------------------------------
+from dotenv import load_dotenv
+
+# 🔥 Load .env FIRST (VERY IMPORTANT)
+BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+# -----------------------------------
+# 3. Flask Core
+# -----------------------------------
 from flask import Flask, render_template, request, jsonify
+
+# -----------------------------------
+# 4. Flask Extensions
+# -----------------------------------
 from flask_login import LoginManager, UserMixin
 from flask_cors import CORS
 from flask_limiter import Limiter

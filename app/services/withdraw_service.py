@@ -1,4 +1,5 @@
-from app.db import get_db_connection
+from app.db import get_cursor
+from decimal import Decimal
 from app.services.wallet_service import get_wallet_balance, debit_wallet
 
 

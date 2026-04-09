@@ -1,31 +1,37 @@
-from app.db import get_db_connection
+from app.db import get_cursor
 
 
+# -----------------------------------
+# Get Payout Report (Admin)
+# -----------------------------------
 def get_payout_report():
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
+    """
+    Fetch all payout/withdrawal data for admin dashboard
+    """
     try:
+        with get_cursor() as cur:
+            cur.execute("""
+                SELECT 
+                    wr.id,
+                    wr.user_id,
+                    u.full_name,
+                    wr.amount,
+                    wr.status,
+                    wr.created_at
+                FROM withdraw_requests wr
+                JOIN users u ON wr.user_id = u.id
+                ORDER BY wr.created_at DESC
+            """)
 
-        cur.execute("""
-            SELECT
-                u.id,
-                u.full_name,
-                u.email,
-                COALESCE(SUM(c.amount),0) as total_commission
-            FROM users u
-            LEFT JOIN commissions c
-            ON u.id = c.earner_id
-            GROUP BY u.id
-            ORDER BY total_commission DESC
-        """)
+            data = cur.fetchall()
 
-        rows = cur.fetchall()
+            return {
+                "status": "success",
+                "data": data
+            }
 
-        return rows
-
-    finally:
-
-        cur.close()
-        conn.close()
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
