@@ -1,35 +1,37 @@
-from app.db import get_db_connection
+from app.db import get_cursor
 from app.utils.epin_generator import generate_epin
 from app.services.package_service import activate_user_package
 
-def generate_epins(admin_id, package_id, amount, quantity):
 
-    conn = get_db_connection()
-    cur = conn.cursor()
+def generate_epins(admin_id, package_id, amount, quantity):
+    """
+    Generate multiple E-Pins.
+    """
 
     pins = []
 
     try:
+        with get_cursor() as cur:
 
-        for _ in range(quantity):
+            for _ in range(quantity):
 
-            pin = generate_epin()
+                pin = generate_epin()
 
-            cur.execute("""
-                INSERT INTO epins
-                (pin_code, package_id, amount, created_by)
-                VALUES (%s,%s,%s,%s)
-                RETURNING pin_code
-            """, (
-                pin,
-                package_id,
-                amount,
-                admin_id
-            ))
+                cur.execute("""
+                    INSERT INTO epins
+                    (pin_code, package_id, amount, created_by)
+                    VALUES (%s,%s,%s,%s)
+                    RETURNING pin_code
+                """, (
+                    pin,
+                    package_id,
+                    amount,
+                    admin_id
+                ))
 
-            pins.append(cur.fetchone()["pin_code"])
+                pins.append(cur.fetchone()["pin_code"])
 
-        conn.commit()
+        # ✅ Auto commit
 
         return {
             "success": True,
@@ -37,53 +39,49 @@ def generate_epins(admin_id, package_id, amount, quantity):
         }
 
     except Exception as e:
-
-        conn.rollback()
+        # ✅ Auto rollback
         raise e
-
-    finally:
-
-        cur.close()
-        conn.close()
 
 
 def redeem_epin(user_id, pin_code):
-
-    conn = get_db_connection()
-    cur = conn.cursor()
+    """
+    Redeem an E-Pin and activate package.
+    """
 
     try:
+        with get_cursor() as cur:
 
-        cur.execute("""
-            SELECT *
-            FROM epins
-            WHERE pin_code=%s
-            AND status='unused'
-        """, (pin_code,))
+            # ✅ Validate E-Pin
+            cur.execute("""
+                SELECT *
+                FROM epins
+                WHERE pin_code = %s
+                AND status = 'unused'
+            """, (pin_code,))
 
-        pin = cur.fetchone()
+            pin = cur.fetchone()
 
-        if not pin:
+            if not pin:
+                return {
+                    "success": False,
+                    "message": "Invalid or used E-Pin"
+                }
 
-            return {
-                "success": False,
-                "message": "Invalid or used E-Pin"
-            }
+            package_id = pin["package_id"]
 
-        package_id = pin["package_id"]
+            # ⚠️ IMPORTANT: pass cur for transaction consistency
+            activate_user_package(cur, user_id, package_id)
 
-        # activate package
-        activate_user_package(user_id, package_id)
+            # ✅ Mark pin as used
+            cur.execute("""
+                UPDATE epins
+                SET status = 'used',
+                    used_by = %s,
+                    used_at = NOW()
+                WHERE id = %s
+            """, (user_id, pin["id"]))
 
-        cur.execute("""
-            UPDATE epins
-            SET status='used',
-                used_by=%s,
-                used_at=NOW()
-            WHERE id=%s
-        """, (user_id, pin["id"]))
-
-        conn.commit()
+        # ✅ Auto commit
 
         return {
             "success": True,
@@ -91,11 +89,5 @@ def redeem_epin(user_id, pin_code):
         }
 
     except Exception as e:
-
-        conn.rollback()
+        # ✅ Auto rollback
         raise e
-
-    finally:
-
-        cur.close()
-        conn.close()

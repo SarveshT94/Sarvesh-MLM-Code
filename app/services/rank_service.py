@@ -1,36 +1,48 @@
-from app.db import get_db_connection
+# app/services/rank_service.py
+
+from app.db import get_cursor
 
 
-def check_and_update_rank(user_id):
+# -----------------------------------
+# CHECK & UPDATE USER RANK
+# -----------------------------------
+def check_and_update_rank(user_id, cur=None):
+    """
+    Updates user rank based on team size.
+    Supports:
+    - standalone usage
+    - transactional usage (with cur)
+    """
 
-    conn = get_db_connection()
-    cur = conn.cursor()
+    def _process(cur):
 
-    try:
-
-        # total team size
+        # ---------------------------
+        # Calculate total team size
+        # ---------------------------
         cur.execute("""
             WITH RECURSIVE downline AS (
 
                 SELECT id, sponsor_id
                 FROM users
-                WHERE sponsor_id=%s
+                WHERE sponsor_id = %s
 
                 UNION ALL
 
                 SELECT u.id, u.sponsor_id
                 FROM users u
                 INNER JOIN downline d
-                ON u.sponsor_id=d.id
+                ON u.sponsor_id = d.id
             )
 
-            SELECT COUNT(*) as team_size
+            SELECT COUNT(*) AS team_size
             FROM downline
         """, (user_id,))
 
         team_size = cur.fetchone()["team_size"]
 
-        # find rank
+        # ---------------------------
+        # Find applicable rank
+        # ---------------------------
         cur.execute("""
             SELECT id, rank_name
             FROM ranks
@@ -44,49 +56,52 @@ def check_and_update_rank(user_id):
         if not rank:
             return
 
-        # current rank
+        # ---------------------------
+        # Get current rank
+        # ---------------------------
         cur.execute("""
             SELECT rank_id
             FROM users
-            WHERE id=%s
+            WHERE id = %s
         """, (user_id,))
 
         current_rank = cur.fetchone()["rank_id"]
 
+        # ---------------------------
+        # Update rank if changed
+        # ---------------------------
         if rank["id"] != current_rank:
 
             cur.execute("""
                 UPDATE users
-                SET rank_id=%s
-                WHERE id=%s
+                SET rank_id = %s
+                WHERE id = %s
             """, (rank["id"], user_id))
 
-            conn.commit()
+    # ---------------------------
+    # Execution Mode
+    # ---------------------------
+    if cur:
+        _process(cur)
+    else:
+        with get_cursor() as new_cur:
+            _process(new_cur)
 
-    finally:
 
-        cur.close()
-        conn.close()
-
-
+# -----------------------------------
+# GET USER RANK
+# -----------------------------------
 def get_user_rank(user_id):
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    try:
+    """
+    Fetch user rank name
+    """
+    with get_cursor() as cur:
 
         cur.execute("""
             SELECT r.rank_name
             FROM users u
-            JOIN ranks r
-            ON u.rank_id=r.id
-            WHERE u.id=%s
+            JOIN ranks r ON u.rank_id = r.id
+            WHERE u.id = %s
         """, (user_id,))
 
         return cur.fetchone()
-
-    finally:
-
-        cur.close()
-        conn.close()

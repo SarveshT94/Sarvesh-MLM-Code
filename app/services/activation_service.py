@@ -3,37 +3,39 @@ from app.services.commission_service import distribute_commission
 
 
 def activate_user(user_id, purchase_amount, force_commission=False):
-
-    conn = get_db_connection()
-    cur = conn.cursor()
+    """
+    Activate user and optionally trigger commission distribution.
+    """
 
     try:
+        with get_cursor() as cur:
 
-        cur.execute("""
-            SELECT id, is_active
-            FROM users
-            WHERE id = %s
-        """, (user_id,))
-
-        user = cur.fetchone()
-
-        if not user:
-            raise Exception("User not found")
-
-        # Activate if not active
-        if not user["is_active"]:
+            # ✅ Fetch user
             cur.execute("""
-                UPDATE users
-                SET is_active = TRUE,
-                    activated_at = NOW()
+                SELECT id, is_active
+                FROM users
                 WHERE id = %s
             """, (user_id,))
 
-        # Run commission
-        if (not user["is_active"]) or force_commission:
-            distribute_commission(conn, cur, user_id, purchase_amount)
+            user = cur.fetchone()
 
-        conn.commit()
+            if not user:
+                raise Exception("User not found")
+
+            # ✅ Activate if not active
+            if not user["is_active"]:
+                cur.execute("""
+                    UPDATE users
+                    SET is_active = TRUE,
+                        activated_at = NOW()
+                    WHERE id = %s
+                """, (user_id,))
+
+            # ✅ Run commission
+            if (not user["is_active"]) or force_commission:
+                distribute_commission(cur, user_id, purchase_amount)
+
+        # ✅ Auto commit handled by get_cursor()
 
         return {
             "success": True,
@@ -41,15 +43,9 @@ def activate_user(user_id, purchase_amount, force_commission=False):
         }
 
     except Exception as e:
-
-        conn.rollback()
+        # ✅ Auto rollback handled by get_cursor()
 
         return {
             "success": False,
             "message": str(e)
         }
-
-    finally:
-
-        cur.close()
-        conn.close()

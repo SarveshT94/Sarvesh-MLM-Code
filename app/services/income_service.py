@@ -1,48 +1,59 @@
-from app.db import get_db_connection
+from app.db import get_cursor
 
 
 def get_income_summary(user_id):
-
-    conn = get_db_connection()
-    cur = conn.cursor()
+    """
+    Fetch income summary for a user:
+    - Total income
+    - Today's income
+    - Wallet balance
+    """
 
     try:
+        with get_cursor() as cur:
 
-        # TOTAL COMMISSION
-        cur.execute("""
-            SELECT COALESCE(SUM(amount),0) as total_income
-            FROM commissions
-            WHERE earner_id=%s
-        """, (user_id,))
+            # ---------------------------
+            # TOTAL COMMISSION
+            # ---------------------------
+            cur.execute("""
+                SELECT COALESCE(SUM(amount), 0) AS total_income
+                FROM commissions
+                WHERE earner_id = %s
+            """, (user_id,))
 
-        total_income = cur.fetchone()["total_income"]
+            total_income = cur.fetchone()["total_income"]
 
-        # TODAY INCOME
-        cur.execute("""
-            SELECT COALESCE(SUM(amount),0) as today_income
-            FROM commissions
-            WHERE earner_id=%s
-            AND DATE(created_at) = CURRENT_DATE
-        """, (user_id,))
+            # ---------------------------
+            # TODAY INCOME
+            # ---------------------------
+            cur.execute("""
+                SELECT COALESCE(SUM(amount), 0) AS today_income
+                FROM commissions
+                WHERE earner_id = %s
+                AND DATE(created_at) = CURRENT_DATE
+            """, (user_id,))
 
-        today_income = cur.fetchone()["today_income"]
+            today_income = cur.fetchone()["today_income"]
 
-        # WALLET BALANCE
-        cur.execute("""
-            SELECT COALESCE(SUM(amount),0) as wallet_balance
-            FROM wallet_ledger
-            WHERE user_id=%s
-        """, (user_id,))
+            # ---------------------------
+            # WALLET BALANCE
+            # ---------------------------
+            cur.execute("""
+                SELECT COALESCE(SUM(amount), 0) AS wallet_balance
+                FROM wallet_ledger
+                WHERE user_id = %s
+            """, (user_id,))
 
-        wallet_balance = cur.fetchone()["wallet_balance"]
+            wallet_balance = cur.fetchone()["wallet_balance"]
 
+            return {
+                "total_income": total_income,
+                "today_income": today_income,
+                "wallet_balance": wallet_balance
+            }
+
+    except Exception as e:
         return {
-            "total_income": total_income,
-            "today_income": today_income,
-            "wallet_balance": wallet_balance
+            "success": False,
+            "message": str(e)
         }
-
-    finally:
-
-        cur.close()
-        conn.close()

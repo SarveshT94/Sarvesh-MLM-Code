@@ -9,7 +9,6 @@ import logging
 # -----------------------------------
 from dotenv import load_dotenv
 
-# 🔥 Load .env FIRST (VERY IMPORTANT)
 BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
@@ -28,7 +27,7 @@ from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 
 # -----------------------------------
-# Logging Configuration
+# Logging
 # -----------------------------------
 logging.basicConfig(
     level=logging.INFO,
@@ -38,18 +37,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # -----------------------------------
-# Global Extensions (IMPORTANT)
+# Extensions
 # -----------------------------------
 login_manager = LoginManager()
 
-# ✅ MAKE LIMITER GLOBAL (IMPORTANT)
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["200 per day", "50 per hour"]
 )
 
 # -----------------------------------
-# Enterprise User Wrapper
+# User Wrapper
 # -----------------------------------
 class User(UserMixin):
     def __init__(self, user_data):
@@ -60,25 +58,27 @@ class User(UserMixin):
 
 
 # -----------------------------------
-# Application Factory
+# App Factory
 # -----------------------------------
 def create_app():
     app = Flask(__name__)
 
     # -----------------------------
-    # 1. Configuration
+    # Config
     # -----------------------------
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
 
     if not app.config["SECRET_KEY"]:
         raise ValueError("SECRET_KEY is not set in environment variables")
 
+    app.config["TEMPLATES_AUTO_RELOAD"] = True 
+    
     # -----------------------------
-    # 2. Init Extensions
+    # Init Extensions
     # -----------------------------
-    limiter.init_app(app)   # ✅ correct way
+    limiter.init_app(app)
 
-    Talisman(app)           # ✅ security headers
+    Talisman(app)
 
     CORS(
         app,
@@ -87,7 +87,7 @@ def create_app():
     )
 
     # -----------------------------
-    # 3. Register Blueprints
+    # Register Blueprints
     # -----------------------------
     from app.routes.auth_routes import auth_bp
     from app.routes.main import main
@@ -105,9 +105,13 @@ def create_app():
     from app.routes.admin.support_routes import admin_support_bp
     from app.routes.admin.backup_routes import admin_backup_bp
 
+    # ✅ API Routes
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
-    app.register_blueprint(main, url_prefix="/api")
 
+    # 🔥 CRITICAL FIX (NO PREFIX)
+    app.register_blueprint(main)
+
+    # ✅ Admin APIs
     app.register_blueprint(admin, url_prefix="/api/admin")
     app.register_blueprint(admin_tree_bp, url_prefix="/api/admin/tree")
     app.register_blueprint(admin_wallet_bp, url_prefix="/api/admin/wallet")
@@ -122,7 +126,7 @@ def create_app():
     app.register_blueprint(admin_backup_bp, url_prefix="/api/admin/backup")
 
     # -----------------------------
-    # 4. Login Manager
+    # Login Manager
     # -----------------------------
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
@@ -148,7 +152,7 @@ def create_app():
         return None
 
     # -----------------------------
-    # 5. Error Handlers
+    # Error Handlers
     # -----------------------------
     @app.errorhandler(404)
     def page_not_found(e):

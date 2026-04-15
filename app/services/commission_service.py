@@ -1,4 +1,7 @@
-def distribute_commission(conn, cur, from_user_id, purchase_amount):
+def distribute_commission(cur, from_user_id, purchase_amount):
+    """
+    Distribute unilevel commission based on commission plan.
+    """
 
     try:
 
@@ -109,9 +112,10 @@ def distribute_commission(conn, cur, from_user_id, purchase_amount):
     except Exception as e:
         raise e
 
-# ✅ Wrapper function (for compatibility)
-def process_commission(conn, cur, from_user_id, purchase_amount):
+
+# ✅ Wrapper function (UPDATED)
+def process_commission(cur, from_user_id, purchase_amount):
     """
     Wrapper to maintain compatibility with old imports
     """
-    return distribute_commission(conn, cur, from_user_id, purchase_amount)
+    return distribute_commission(cur, from_user_id, purchase_amount)

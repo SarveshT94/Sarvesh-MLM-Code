@@ -1,30 +1,197 @@
+<h1 style="color:red;">NEW UI LOADED</h1>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
+    <meta charset="UTF-8">
     <title>Admin Dashboard</title>
+
+    <!-- Bootstrap + Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+
+    <style>
+        body {
+            background: #f1f5f9;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            height: 100vh;
+            background: linear-gradient(180deg, #0f172a, #1e293b);
+            color: white;
+            padding: 20px;
+        }
+
+        .sidebar h4 {
+            margin-bottom: 30px;
+            font-weight: bold;
+        }
+
+        .sidebar a {
+            display: block;
+            color: #cbd5e1;
+            margin: 12px 0;
+            text-decoration: none;
+            font-size: 15px;
+            padding: 8px;
+            border-radius: 8px;
+        }
+
+        .sidebar a:hover {
+            background: #334155;
+            color: white;
+        }
+
+        /* Topbar */
+        .topbar {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        /* Cards */
+        .stat-card {
+            border-radius: 16px;
+            color: white;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+            transition: 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-blue {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+        }
+
+        .card-green {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+        }
+
+        .card-purple {
+            background: linear-gradient(135deg, #a855f7, #7e22ce);
+        }
+
+        .card-orange {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+        }
+
+        .stat-card h6 {
+            opacity: 0.8;
+        }
+
+        .stat-card h2 {
+            font-weight: bold;
+        }
+
+        /* Quick Actions */
+        .quick-card {
+            border-radius: 16px;
+            padding: 20px;
+            background: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .btn-custom {
+            border-radius: 10px;
+            padding: 10px 15px;
+        }
+    </style>
 </head>
 
 <body>
 
-<h1>Admin Dashboard</h1>
+<div class="container-fluid">
+    <div class="row">
 
-<h2>System Statistics</h2>
+        <!-- Sidebar -->
+        <div class="col-md-2 sidebar">
+            <h4>🚀 Admin Panel</h4>
 
-<ul>
-    <li>Total Users: {{ stats.total_users }}</li>
-    <li>Total Active Users: {{ stats.active_users }}</li>
-    <li>Total Commissions: {{ stats.total_commissions }}</li>
-    <li>Total Withdraw Requests: {{ stats.withdraw_requests }}</li>
-</ul>
+            <a href="/"><i class="bi bi-speedometer2"></i> Dashboard</a>
+            <a href="/admin/users"><i class="bi bi-people"></i> Users</a>
+            <a href="/admin/withdraws"><i class="bi bi-cash-stack"></i> Withdrawals</a>
+            <a href="/admin/kyc"><i class="bi bi-shield-check"></i> KYC</a>
+            <a href="/admin/reports"><i class="bi bi-bar-chart"></i> Reports</a>
+        </div>
 
-<hr>
+        <!-- Main Content -->
+        <div class="col-md-10 p-4">
 
-<a href="/admin/users">View Users</a>
-<br><br>
+            <!-- Topbar -->
+            <div class="topbar d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="mb-0">Dashboard Overview</h4>
+                    <small class="text-muted">Welcome, Admin 👋</small>
+                </div>
+                <span class="text-muted">MLM System v1.0</span>
+            </div>
 
-<a href="/admin/withdraws">Withdraw Requests</a>
+            <!-- Stats -->
+            <div class="row g-4 mb-4">
+
+                <div class="col-md-3">
+                    <div class="stat-card card-blue">
+                        <h6>Total Users</h6>
+                        <h2>{{ stats.total_users }}</h2>
+                        <i class="bi bi-people fs-2 position-absolute bottom-0 end-0 p-3 opacity-25"></i>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="stat-card card-green">
+                        <h6>Active Users</h6>
+                        <h2>{{ stats.active_users }}</h2>
+                        <i class="bi bi-person-check fs-2 position-absolute bottom-0 end-0 p-3 opacity-25"></i>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="stat-card card-purple">
+                        <h6>Total Commissions</h6>
+                        <h2>₹{{ stats.total_commissions }}</h2>
+                        <i class="bi bi-currency-rupee fs-2 position-absolute bottom-0 end-0 p-3 opacity-25"></i>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="stat-card card-orange">
+                        <h6>Withdraw Requests</h6>
+                        <h2>{{ stats.withdraw_requests }}</h2>
+                        <i class="bi bi-wallet2 fs-2 position-absolute bottom-0 end-0 p-3 opacity-25"></i>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-card">
+                <h5 class="mb-3">⚡ Quick Actions</h5>
+
+                <a href="/admin/users" class="btn btn-primary btn-custom me-2">
+                    <i class="bi bi-people"></i> Manage Users
+                </a>
+
+                <a href="/admin/withdraws" class="btn btn-warning btn-custom me-2">
+                    <i class="bi bi-cash-stack"></i> Withdrawals
+                </a>
+
+                <a href="/admin/kyc" class="btn btn-success btn-custom">
+                    <i class="bi bi-shield-check"></i> KYC Requests
+                </a>
+            </div>
+
+        </div>
+
+    </div>
+</div>
 
 </body>
-
 </html>

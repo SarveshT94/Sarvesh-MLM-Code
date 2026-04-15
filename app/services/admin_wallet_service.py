@@ -1,82 +1,154 @@
 from app.db import get_cursor
-from decimal import Decimal
+from app.services.wallet_service import credit_wallet
+
 
 # -----------------------------------
 # Get All Pending Withdrawals
 # -----------------------------------
 def get_pending_withdrawals():
     """
-    Fetches all pending payouts for the Admin Dashboard.
-    Joins with the users table to get the member's name and email.
+    Fetch all pending withdrawals for admin dashboard.
     """
     with get_cursor() as cur:
         cur.execute("""
             SELECT w.id, w.user_id, u.full_name, u.email, w.amount, w.status, w.created_at
             FROM withdraw_requests w
             JOIN users u ON w.user_id = u.id
-            WHERE w.status = 'Pending'
+            WHERE w.status = 'pending'
             ORDER BY w.created_at ASC
         """)
         return cur.fetchall()
 
+
 # -----------------------------------
-# Approve Withdrawal (Money Leaves Company)
+# Approve Withdrawal
 # -----------------------------------
 def approve_withdrawal(request_id, admin_id):
     """
-    Locks the request, marks it as paid. 
-    (In a fully deployed system, this is where you trigger the Razorpay/Stripe API).
+    Marks withdrawal as approved (money leaves system).
     """
     with get_cursor() as cur:
-        # 1. Lock the request so multiple admins can't double-pay it
-        cur.execute("SELECT * FROM withdraw_requests WHERE id = %s FOR UPDATE", (request_id,))
+
+        # 🔒 Lock request
+        cur.execute("""
+            SELECT * FROM withdraw_requests
+            WHERE id = %s
+            FOR UPDATE
+        """, (request_id,))
+
         request = cur.fetchone()
-        
-        if not request or request['status'] != 'Pending':
+
+        if not request or request['status'] != 'pending':
             return {"status": "error", "message": "Request not found or already processed."}
 
-        # 2. Update the request status
+        # ✅ Update status
         cur.execute("""
             UPDATE withdraw_requests 
-            SET status = 'Approved', updated_at = CURRENT_TIMESTAMP
+            SET status = 'approved',
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = %s
         """, (request_id,))
-        
-        return {"status": "success", "message": f"Withdrawal of {request['amount']} approved successfully."}
+
+        return {
+            "status": "success",
+            "message": f"Withdrawal of {request['amount']} approved successfully."
+        }
+
 
 # -----------------------------------
-# Reject Withdrawal (Safe Auto-Refund)
+# Reject Withdrawal (WITH SAFE REFUND)
 # -----------------------------------
 def reject_withdrawal(request_id, admin_id, reason):
     """
-    Enterprise Standard: If a payout is rejected, the funds MUST be 
-    safely credited back to the user's ledger so their balance is restored.
+    Reject withdrawal and safely refund wallet.
     """
     with get_cursor() as cur:
-        # 1. Lock the request
-        cur.execute("SELECT * FROM withdraw_requests WHERE id = %s FOR UPDATE", (request_id,))
+
+        # 🔒 Lock request
+        cur.execute("""
+            SELECT * FROM withdraw_requests
+            WHERE id = %s
+            FOR UPDATE
+        """, (request_id,))
+
         request = cur.fetchone()
-        
-        if not request or request['status'] != 'Pending':
+
+        if not request or request['status'] != 'pending':
             return {"status": "error", "message": "Request not found or already processed."}
 
-        # 2. Update status to Rejected
+        # ✅ Update status
         cur.execute("""
             UPDATE withdraw_requests 
-            SET status = 'Rejected', updated_at = CURRENT_TIMESTAMP
+            SET status = 'rejected',
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = %s
         """, (request_id,))
 
-        # 3. CRITICAL: Refund the user's wallet via Double-Entry Bookkeeping
-        cur.execute("""
-            INSERT INTO wallet_ledger
-            (user_id, amount, transaction_type, reference)
-            VALUES (%s, %s, %s, %s)
-        """, (
-            request['user_id'], 
-            request['amount'], 
-            "withdrawal_refund", 
-            f"Refund for rejected withdrawal #{request_id}. Reason: {reason}"
-        ))
+        # ✅ Refund using wallet service (IMPORTANT)
+        credit_wallet(
+            cur,
+            request['user_id'],
+            request['amount'],
+            reference=f"withdraw_refund_{request_id}",
+            description=f"Refund for rejected withdrawal #{request_id}. Reason: {reason}"
+        )
 
-        return {"status": "success", "message": "Withdrawal rejected. Funds have been safely returned to the user's wallet."}
+        return {
+            "status": "success",
+            "message": "Withdrawal rejected and amount refunded successfully."
+        }
+
+
+# -----------------------------------
+# ADMIN WALLET ADJUSTMENT (🔥 NEW)
+# -----------------------------------
+
+from app.services.wallet_service import credit_wallet, debit_wallet
+
+
+def admin_wallet_adjust(user_id, amount, action, admin_id, remark=""):
+    """
+    Admin can credit or debit user wallet manually.
+
+    action: 'credit' or 'debit'
+    """
+
+    try:
+        with get_cursor() as cur:
+
+            if amount <= 0:
+                return {"status": "error", "message": "Invalid amount"}
+
+            reference = f"admin_{action}_{admin_id}"
+
+            if action == "credit":
+                credit_wallet(
+                    cur,
+                    user_id,
+                    amount,
+                    reference=reference,
+                    description=remark or "Admin credit"
+                )
+
+            elif action == "debit":
+                debit_wallet(
+                    cur,
+                    user_id,
+                    amount,
+                    reference=reference,
+                    description=remark or "Admin debit"
+                )
+
+            else:
+                return {"status": "error", "message": "Invalid action"}
+
+            return {
+                "status": "success",
+                "message": f"Wallet {action} successful"
+            }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }

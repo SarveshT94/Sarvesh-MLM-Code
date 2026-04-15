@@ -8,55 +8,50 @@ from app.services.wallet_service import get_wallet_balance, debit_wallet
 # ----------------------------------
 
 def create_withdraw_request(user_id, amount):
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
     try:
+        with get_cursor() as cur:
 
-        if amount <= 0:
-            return {
-                "success": False,
-                "message": "Invalid withdraw amount"
-            }
+            if amount <= 0:
+                return {
+                    "success": False,
+                    "message": "Invalid withdraw amount"
+                }
 
-        # Check wallet balance
-        balance = get_wallet_balance(user_id)
+            # ✅ Use SAME transaction
+            balance = get_wallet_balance(cur, user_id)
 
-        if balance < amount:
-            return {
-                "success": False,
-                "message": "Insufficient wallet balance"
-            }
+            if balance < amount:
+                return {
+                    "success": False,
+                    "message": "Insufficient wallet balance"
+                }
 
-        # Prevent multiple pending requests
-        cur.execute("""
-            SELECT id
-            FROM withdraw_requests
-            WHERE user_id=%s
-            AND status='pending'
-            LIMIT 1
-        """, (user_id,))
+            # Prevent multiple pending requests
+            cur.execute("""
+                SELECT id
+                FROM withdraw_requests
+                WHERE user_id=%s
+                AND status='pending'
+                LIMIT 1
+            """, (user_id,))
 
-        pending = cur.fetchone()
+            pending = cur.fetchone()
 
-        if pending:
-            return {
-                "success": False,
-                "message": "You already have a pending withdraw request"
-            }
+            if pending:
+                return {
+                    "success": False,
+                    "message": "You already have a pending withdraw request"
+                }
 
-        # Create request
-        cur.execute("""
-            INSERT INTO withdraw_requests
-            (user_id, amount)
-            VALUES (%s,%s)
-            RETURNING id
-        """, (user_id, amount))
+            # Create request
+            cur.execute("""
+                INSERT INTO withdraw_requests
+                (user_id, amount)
+                VALUES (%s,%s)
+                RETURNING id
+            """, (user_id, amount))
 
-        request_id = cur.fetchone()["id"]
-
-        conn.commit()
+            request_id = cur.fetchone()["id"]
 
         return {
             "success": True,
@@ -64,14 +59,7 @@ def create_withdraw_request(user_id, amount):
         }
 
     except Exception as e:
-
-        conn.rollback()
         raise e
-
-    finally:
-
-        cur.close()
-        conn.close()
 
 
 # ----------------------------------
@@ -79,11 +67,7 @@ def create_withdraw_request(user_id, amount):
 # ----------------------------------
 
 def get_withdraw_requests(limit=100, offset=0):
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    try:
+    with get_cursor() as cur:
 
         cur.execute("""
             SELECT
@@ -103,69 +87,53 @@ def get_withdraw_requests(limit=100, offset=0):
 
         return cur.fetchall()
 
-    finally:
-
-        cur.close()
-        conn.close()
-
 
 # ----------------------------------
 # APPROVE WITHDRAW
 # ----------------------------------
 
 def approve_withdraw(request_id):
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
     try:
+        with get_cursor() as cur:
 
-        cur.execute("""
-            SELECT user_id, amount, status
-            FROM withdraw_requests
-            WHERE id=%s
-        """, (request_id,))
+            cur.execute("""
+                SELECT user_id, amount, status
+                FROM withdraw_requests
+                WHERE id=%s
+            """, (request_id,))
 
-        request = cur.fetchone()
+            request = cur.fetchone()
 
-        if not request:
-            raise Exception("Withdraw request not found")
+            if not request:
+                raise Exception("Withdraw request not found")
 
-        if request["status"] != "pending":
-            raise Exception("Request already processed")
+            if request["status"] != "pending":
+                raise Exception("Request already processed")
 
-        user_id = request["user_id"]
-        amount = request["amount"]
+            user_id = request["user_id"]
+            amount = request["amount"]
 
-        # Debit wallet
-        debit_wallet(
-            user_id,
-            amount,
-            f"withdraw_{request_id}",
-            "Withdraw approved"
-        )
+            # ✅ Debit wallet in SAME transaction
+            debit_wallet(
+                cur,
+                user_id,
+                amount,
+                f"withdraw_{request_id}",
+                "Withdraw approved"
+            )
 
-        # Update request
-        cur.execute("""
-            UPDATE withdraw_requests
-            SET status='approved',
-                processed_at=NOW()
-            WHERE id=%s
-        """, (request_id,))
-
-        conn.commit()
+            # Update request
+            cur.execute("""
+                UPDATE withdraw_requests
+                SET status='approved',
+                    processed_at=NOW()
+                WHERE id=%s
+            """, (request_id,))
 
         return True
 
     except Exception as e:
-
-        conn.rollback()
         raise e
-
-    finally:
-
-        cur.close()
-        conn.close()
 
 
 # ----------------------------------
@@ -173,11 +141,7 @@ def approve_withdraw(request_id):
 # ----------------------------------
 
 def reject_withdraw(request_id, remark=None):
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    try:
+    with get_cursor() as cur:
 
         cur.execute("""
             UPDATE withdraw_requests
@@ -188,11 +152,4 @@ def reject_withdraw(request_id, remark=None):
             AND status='pending'
         """, (remark, request_id))
 
-        conn.commit()
-
         return True
-
-    finally:
-
-        cur.close()
-        conn.close()
