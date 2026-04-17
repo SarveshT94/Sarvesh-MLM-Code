@@ -11,7 +11,6 @@ from app.services.admin_wallet_service import admin_wallet_adjust
 # --- Enterprise Service Imports ---
 from app.services.kyc_service import get_pending_kyc, approve_kyc, reject_kyc
 from app.services.admin_wallet_service import get_pending_withdrawals, approve_withdrawal, reject_withdrawal
-from app.services.package_service import create_package, get_all_active_packages, deactivate_package
 
 # Define the blueprint
 admin = Blueprint("admin", __name__)
@@ -142,47 +141,46 @@ def process_kyc_rejection(kyc_id):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
 # ==========================================
 # 💰 ENTERPRISE PAYOUT APPROVAL ROUTES
 # ==========================================
 
-@admin.route('/payouts/pending', methods=['GET'])
+@admin.route('/admin/withdraws', methods=['GET'])
 @login_required
-def fetch_pending_payouts():
-    """Fetches all pending withdrawal requests for admin review."""
-    if not is_admin(): return jsonify({"status": "error", "message": "Unauthorized."}), 403
+def manage_withdrawals():
+    """Renders the UI for pending withdrawals with calculated deductions."""
+    if not is_admin(): return redirect("/") 
     try:
-        return jsonify({"status": "success", "data": get_pending_withdrawals()}), 200
+        pending_requests = get_pending_withdrawals()
+        return render_template("admin/withdraw_requests.html", requests=pending_requests)
     except Exception as e:
-        return jsonify({"status": "error", "message": "System Error: Unable to fetch payouts."}), 500
+        return f"System Error: {str(e)}"
 
-@admin.route('/payouts/approve/<int:request_id>', methods=['POST'])
+@admin.route('/payouts/approve/<int:request_id>', methods=['POST', 'GET'])
 @login_required
 def process_payout_approval(request_id):
-    """Approves a withdrawal (Money leaves company)."""
+    """Approves a withdrawal."""
     if not is_admin(): return jsonify({"status": "error", "message": "Unauthorized."}), 403
     try:
         result = approve_withdrawal(request_id, current_user.id)
-        return jsonify(result), 200 if result['status'] == 'success' else 400
+        # Using redirect so the page refreshes nicely after clicking the button in HTML
+        return redirect("/admin/withdraws") 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @admin.route('/payouts/reject/<int:request_id>', methods=['POST'])
 @login_required
 def process_payout_rejection(request_id):
-    """Rejects a withdrawal and AUTO-REFUNDS the user's wallet safely."""
+    """Rejects a withdrawal and AUTO-REFUNDS the user's wallet."""
     if not is_admin(): return jsonify({"status": "error", "message": "Unauthorized."}), 403
     
-    data = request.get_json()
-    reason = data.get('reason', 'Violation of terms or invalid bank details.')
+    reason = request.form.get('reason', 'Violation of terms or invalid bank details.')
     
     try:
         result = reject_withdrawal(request_id, current_user.id, reason)
-        return jsonify(result), 200 if result['status'] == 'success' else 400
+        return redirect("/admin/withdraws")
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 # ==========================================
 # 📦 DYNAMIC PACKAGE CREATOR ROUTES

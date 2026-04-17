@@ -1,157 +1,139 @@
 from app.db import get_cursor
 from decimal import Decimal
-import json
+from app.services.commission_log_service import distribute_package_commissions
+
+# ==========================================
+# 1. SUBSCRIPTION PLANS MANAGEMENT
+# ==========================================
+def get_all_plans():
+    """Fetches all plans for the Admin UI"""
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM subscription_plans ORDER BY price ASC")
+        return cur.fetchall()
+
+def get_plan_by_id(plan_id, cur=None):
+    """
+    Supports both standalone calls and transactional calls.
+    """
+    query = "SELECT * FROM subscription_plans WHERE id = %s"
+    
+    if cur:
+        cur.execute(query, (plan_id,))
+        return cur.fetchone()
+    else:
+        with get_cursor() as new_cur:
+            new_cur.execute(query, (plan_id,))
+            return new_cur.fetchone()
+
+# Backward compatibility alias so other files don't break
+get_package_by_id = get_plan_by_id
+get_all_active_packages = get_all_plans
 
 
-# -----------------------------------
-# Create a New Dynamic Combo Plan
-# -----------------------------------
-def create_package(name, price, direct_commission, level_commissions_dict):
+def update_plan(plan_id, price, coupons, is_active):
+    """Updates plan dynamically from Admin Dashboard"""
     with get_cursor() as cur:
         cur.execute("""
-            INSERT INTO packages
-            (name, price, direct_commission, level_commissions, is_active)
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING id
-        """, (
-            name,
-            Decimal(str(price)),
-            Decimal(str(direct_commission)),
-            json.dumps(level_commissions_dict),
-            True
-        ))
-        
+            UPDATE subscription_plans 
+            SET price = %s, lucky_draw_coupons = %s, is_active = %s
+            WHERE id = %s
+        """, (price, coupons, is_active, plan_id))
+
+def create_plan(name, price, coupons=12):
+    """Creates a new plan"""
+    with get_cursor() as cur:
+        cur.execute("""
+            INSERT INTO subscription_plans (name, price, lucky_draw_coupons, is_active)
+            VALUES (%s, %s, %s, TRUE) RETURNING id
+        """, (name, price, coupons))
         return cur.fetchone()['id']
 
 
-# -----------------------------------
-# Get All Active Packages
-# -----------------------------------
-def get_all_active_packages():
+# ==========================================
+# 2. GLOBAL & LEVEL COMMISSIONS MANAGEMENT
+# ==========================================
+def get_global_commissions():
+    """Fetches flat percentages like direct referral and cashback"""
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM global_commissions ORDER BY setting_key")
+        return cur.fetchall()
+
+def update_global_commission(setting_key, percentage_value):
+    """Updates a global percentage dynamically from Admin Dashboard"""
     with get_cursor() as cur:
         cur.execute("""
-            SELECT id, name, price, direct_commission, level_commissions 
-            FROM packages 
-            WHERE is_active = TRUE 
-            ORDER BY price ASC
-        """)
+            UPDATE global_commissions 
+            SET percentage_value = %s
+            WHERE setting_key = %s
+        """, (percentage_value, setting_key))
+
+def get_level_commissions():
+    """Fetches the 10-level upline percentages"""
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM level_commissions ORDER BY level ASC")
+        return cur.fetchall()
+
+def get_team_target_bonuses():
+    """Fetches the performance bonuses"""
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM team_target_bonuses ORDER BY min_volume ASC")
         return cur.fetchall()
 
 
-# -----------------------------------
-# Get a Single Package
-# -----------------------------------
-def get_package_by_id(package_id, cur=None):
-    """
-    Supports both:
-    - standalone calls (creates cursor)
-    - transactional calls (uses existing cursor)
-    """
-
-    if cur:
-        cur.execute("""
-            SELECT id, name, price, direct_commission, level_commissions 
-            FROM packages 
-            WHERE id = %s
-        """, (package_id,))
-        
-        package = cur.fetchone()
-
-    else:
-        with get_cursor() as new_cur:
-            new_cur.execute("""
-                SELECT id, name, price, direct_commission, level_commissions 
-                FROM packages 
-                WHERE id = %s
-            """, (package_id,))
-            
-            package = new_cur.fetchone()
-
-    # Convert JSON → dict
-    if package and package['level_commissions']:
-        if isinstance(package['level_commissions'], str):
-            package['level_commissions'] = json.loads(package['level_commissions'])
-
-    return package
-
-
-# -----------------------------------
-# Deactivate Package
-# -----------------------------------
-def deactivate_package(package_id):
-    with get_cursor() as cur:
-        cur.execute("""
-            UPDATE packages 
-            SET is_active = FALSE 
-            WHERE id = %s
-        """, (package_id,))
-        return True
-
-
-# -----------------------------------
-# Activate User Package (🔥 NEW - CRITICAL)
-# -----------------------------------
-def activate_user_package(cur, user_id, package_id):
+# ==========================================
+# 3. USER ACTIVATION & PURCHASE FLOW
+# ==========================================
+def activate_user_package(cur, user_id, plan_id):
     """
     Enterprise-safe activation inside existing transaction.
     """
+    plan = get_plan_by_id(plan_id, cur)
 
-    # ✅ Get package using SAME transaction
-    package = get_package_by_id(package_id, cur)
+    if not plan:
+        raise Exception("Plan not found")
 
-    if not package:
-        raise Exception("Package not found")
-
-    # ---------------------------
-    # Example Activation Logic
-    # ---------------------------
-    # (Keep minimal — extend later if needed)
-
+    # Update User Profile
     cur.execute("""
         UPDATE users
         SET package_id = %s,
             is_active = TRUE,
             activated_at = NOW()
         WHERE id = %s
-    """, (package_id, user_id))
+    """, (plan_id, user_id))
 
-    # ---------------------------
-    # Optional: Track purchase
-    # ---------------------------
+    # Track purchase in history
     cur.execute("""
         INSERT INTO user_packages
         (user_id, package_id, amount, created_at)
         VALUES (%s, %s, %s, NOW())
     """, (
         user_id,
-        package_id,
-        package['price']
+        plan_id,
+        plan['price']
     ))
 
     return True
 
-
-# -----------------------------------
-# Purchase Package (Standalone API)
-# -----------------------------------
-def purchase_package(user_id, package_id):
+def purchase_package(user_id, plan_id):
     """
-    Standalone purchase flow (non E-PIN).
+    Standalone purchase flow.
     """
-
     try:
         with get_cursor() as cur:
+            plan = get_plan_by_id(plan_id, cur)
 
-            package = get_package_by_id(package_id, cur)
+            if not plan:
+                return {"success": False, "message": "Plan not found."}
 
-            if not package:
-                return {"success": False, "message": "Package not found."}
-
-            activate_user_package(cur, user_id, package_id)
+            # 1. Activate the user and record the purchase
+            activate_user_package(cur, user_id, plan_id)
+            
+            # 2. 🔥 THE MAGIC TRIGGER: Distribute the 10-level commissions & Target Bonus!
+            distribute_package_commissions(cur, user_id, plan['price'])
 
             return {
                 "success": True,
-                "amount": package['price']
+                "amount": plan['price']
             }
 
     except Exception as e:

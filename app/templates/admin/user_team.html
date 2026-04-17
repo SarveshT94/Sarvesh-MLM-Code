@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Team Tree | MLM Admin</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; color: #334155; }
+        .sidebar { height: 100vh; width: 260px; position: fixed; top: 0; left: 0; background: #0f172a; color: #f8fafc; padding: 1.5rem 1rem; z-index: 1000; }
+        .sidebar-brand { font-size: 1.25rem; font-weight: 700; margin-bottom: 2.5rem; display: flex; align-items: center; gap: 0.75rem; color: #ffffff; }
+        .nav-link { color: #94a3b8; font-weight: 500; padding: 0.75rem 1rem; border-radius: 0.5rem; display: flex; align-items: center; gap: 0.75rem; text-decoration: none; }
+        .nav-link:hover, .nav-link.active { color: #ffffff; background: #1e293b; }
+        .main-content { margin-left: 260px; padding: 2rem; min-height: 100vh; }
+
+        /* Tree Styling */
+        .level-card { background: white; border-radius: 1rem; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 1.5rem; overflow: hidden; }
+        .level-header { background: #f8fafc; padding: 1rem 1.5rem; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #0f172a; display: flex; justify-content: space-between; }
+        .team-member { padding: 0.75rem 1.5rem; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: 1rem; }
+        .member-avatar { width: 35px; height: 35px; border-radius: 50%; background: #eff6ff; color: #3b82f6; display: flex; align-items: center; justify-content: center; font-weight: bold; text-transform: uppercase; }
+        .ref-code { font-family: monospace; background: #f1f5f9; padding: 0.1rem 0.4rem; border-radius: 0.25rem; color: #475569; letter-spacing: 0.5px;}
+    </style>
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="sidebar-brand"><i class="bi bi-hexagon-fill text-primary"></i><span>MLM Admin</span></div>
+        <div class="nav flex-column">
+            <a href="/" class="nav-link"><i class="bi bi-grid-1x2"></i> Dashboard</a>
+            <a href="/admin/users" class="nav-link active"><i class="bi bi-people"></i> Users</a>
+            <a href="/admin/packages" class="nav-link"><i class="bi bi-box-seam"></i> Manage Plans</a>
+            <a href="/admin/withdraws" class="nav-link"><i class="bi bi-cash-stack"></i> Withdrawals</a>
+            <a href="/admin/reports" class="nav-link"><i class="bi bi-bar-chart"></i> Reports</a>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="mb-4">
+            <a href="/admin/users" class="text-decoration-none text-muted small"><i class="bi bi-arrow-left"></i> Back to Users</a>
+            <h4 class="fw-bold mt-2">Team Structure: {{ user.full_name | default('Unknown') }}</h4>
+            <span class="badge bg-light text-dark border">User ID: #{{ user.id | default('N/A') }}</span>
+        </div>
+
+        {% if team_tree %}
+            {% for level, members in team_tree.items() %}
+            <div class="level-card">
+                <div class="level-header">
+                    <span>Level {{ level }}</span>
+                    <span class="badge bg-primary rounded-pill">{{ members|length }} Members</span>
+                </div>
+                <div class="level-body">
+                    {% for member in members %}
+                    <div class="team-member">
+                        <div class="member-avatar">
+                            {{ member.full_name[0] if member.full_name else 'U' }}
+                        </div>
+                        <div>
+                            <div class="fw-bold text-dark">{{ member.full_name | default('Unknown User') }}</div>
+                            <div class="small text-muted mt-1">
+                                ID: #{{ member.id | default('N/A') }} 
+                                <span class="mx-1">•</span> 
+                                Ref: <span class="ref-code">{{ member.referral_code | default('N/A') }}</span> 
+                                <span class="mx-1">•</span> 
+                                Joined: {{ member.created_at | default('Unknown') }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="text-center py-5 bg-white rounded-4 shadow-sm">
+                <i class="bi bi-diagram-3 fs-1 text-muted mb-3 d-block"></i>
+                <h5>No team members yet</h5>
+                <p class="text-muted">This user hasn't built a team structure yet.</p>
+            </div>
+        {% endif %}
+    </main>
+</body>
+</html>

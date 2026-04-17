@@ -1,30 +1,48 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
-<title>Financial Report</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Financial Report | MLM System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; color: #334155; overflow-x: hidden; }
+        .sidebar { height: 100vh; width: 260px; position: fixed; top: 0; left: 0; background: #0f172a; color: #f8fafc; padding: 1.5rem 1rem; z-index: 1000; }
+        .sidebar-brand { font-size: 1.25rem; font-weight: 700; margin-bottom: 2.5rem; padding-left: 0.5rem; display: flex; align-items: center; gap: 0.75rem; color: #ffffff; }
+        .sidebar-brand i { color: #3b82f6; font-size: 1.5rem; }
+        .nav-link { color: #94a3b8; font-weight: 500; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.75rem; transition: all 0.2s ease-in-out; text-decoration: none; }
+        .nav-link:hover, .nav-link.active { color: #ffffff; background: #1e293b; }
+        .main-content { margin-left: 260px; padding: 2rem; min-height: 100vh; }
+        .page-header { margin-bottom: 2rem; }
+        .stat-card { background: #ffffff; border-radius: 1rem; padding: 1.5rem; border: none; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); display: flex; align-items: center; height: 100%; }
+        .icon-box { width: 60px; height: 60px; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center; font-size: 1.75rem; margin-right: 1.25rem; flex-shrink: 0; }
+        .bg-blue-light { background: #eff6ff; color: #3b82f6; }
+        .stat-info h6 { color: #64748b; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-info h2 { color: #0f172a; margin: 0; font-weight: 700; font-size: 1.75rem; }
+    </style>
 </head>
-
 <body>
-
-<h1>MLM Financial Report</h1>
-
-<ul>
-
-<li>Total Users: {{ report.total_users }}</li>
-
-<li>Active Users: {{ report.active_users }}</li>
-
-<li>Total Commission Paid: {{ report.total_commission }}</li>
-
-<li>Total Withdraw Approved: {{ report.approved_withdraw }}</li>
-
-<li>Withdraw Pending: {{ report.pending_withdraw }}</li>
-
-<li>Total Wallet Balance: {{ report.wallet_total }}</li>
-
-</ul>
-
+    <nav class="sidebar">
+        <div class="sidebar-brand"><i class="bi bi-hexagon-fill"></i><span>MLM Admin</span></div>
+        <div class="nav flex-column">
+            <a href="/" class="nav-link"><i class="bi bi-grid-1x2"></i> Dashboard</a>
+            <a href="/admin/users" class="nav-link"><i class="bi bi-people"></i> Users</a>
+            <a href="/admin/packages" class="nav-link"><i class="bi bi-box-seam"></i> Manage Plans</a>
+            <a href="/admin/withdraws" class="nav-link"><i class="bi bi-cash-stack"></i> Withdrawals</a>
+            <a href="/admin/kyc" class="nav-link"><i class="bi bi-shield-check"></i> KYC</a>
+            <a href="/admin/reports" class="nav-link active"><i class="bi bi-bar-chart"></i> Reports</a>
+        </div>
+    </nav>
+    <main class="main-content">
+        <div class="page-header d-flex justify-content-between align-items-center"><div><h4>📊 Financial Report</h4><p class="text-muted">System-wide overview.</p></div></div>
+        <div class="row g-4 mb-5">
+            <div class="col-md-6 col-lg-4"><div class="stat-card"><div class="icon-box bg-blue-light"><i class="bi bi-people-fill"></i></div><div class="stat-info"><h6>Total Users</h6><h2>{{ report.total_users }}</h2></div></div></div>
+        </div>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
-
 </html>

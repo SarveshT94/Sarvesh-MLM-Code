@@ -9,6 +9,7 @@ import logging
 # -----------------------------------
 from dotenv import load_dotenv
 
+# 🔥 Load .env FIRST (VERY IMPORTANT)
 BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
@@ -27,7 +28,7 @@ from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 
 # -----------------------------------
-# Logging
+# Logging Configuration
 # -----------------------------------
 logging.basicConfig(
     level=logging.INFO,
@@ -37,17 +38,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # -----------------------------------
-# Extensions
+# Global Extensions (IMPORTANT)
 # -----------------------------------
 login_manager = LoginManager()
 
+# ✅ MAKE LIMITER GLOBAL (IMPORTANT)
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["200 per day", "50 per hour"]
 )
 
 # -----------------------------------
-# User Wrapper
+# Enterprise User Wrapper
 # -----------------------------------
 class User(UserMixin):
     def __init__(self, user_data):
@@ -58,27 +60,48 @@ class User(UserMixin):
 
 
 # -----------------------------------
-# App Factory
+# Application Factory
 # -----------------------------------
 def create_app():
     app = Flask(__name__)
 
     # -----------------------------
-    # Config
+    # 1. Configuration
     # -----------------------------
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
 
     if not app.config["SECRET_KEY"]:
         raise ValueError("SECRET_KEY is not set in environment variables")
 
-    app.config["TEMPLATES_AUTO_RELOAD"] = True 
-    
     # -----------------------------
-    # Init Extensions
+    # 2. Init Extensions
     # -----------------------------
-    limiter.init_app(app)
+    limiter.init_app(app)   # ✅ correct way
 
-    Talisman(app)
+    # ✅ Configure Content Security Policy to allow Bootstrap & Google Fonts
+    csp = {
+        'default-src': [
+            '\'self\''
+        ],
+        'style-src': [
+            '\'self\'',
+            '\'unsafe-inline\'',
+            'https://cdn.jsdelivr.net',
+            'https://fonts.googleapis.com'
+        ],
+        'font-src': [
+            '\'self\'',
+            'https://fonts.gstatic.com',
+            'https://cdn.jsdelivr.net',
+            'data:'
+        ],
+        'script-src': [
+            '\'self\'',
+            '\'unsafe-inline\'',
+            'https://cdn.jsdelivr.net'
+        ]
+    }
+    Talisman(app, content_security_policy=csp) # ✅ security headers updated
 
     CORS(
         app,
@@ -87,7 +110,7 @@ def create_app():
     )
 
     # -----------------------------
-    # Register Blueprints
+    # 3. Register Blueprints
     # -----------------------------
     from app.routes.auth_routes import auth_bp
     from app.routes.main import main
@@ -104,14 +127,15 @@ def create_app():
     from app.routes.support_routes import support_bp
     from app.routes.admin.support_routes import admin_support_bp
     from app.routes.admin.backup_routes import admin_backup_bp
+    from app.routes.admin.package_routes import admin_package_bp
 
-    # ✅ API Routes
+
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
-
-    # 🔥 CRITICAL FIX (NO PREFIX)
+    app.register_blueprint(admin_package_bp)
+    
+    # 🔥 CRITICAL FIX: Removed url_prefix="/api" so the dashboard loads at "/"
     app.register_blueprint(main)
 
-    # ✅ Admin APIs
     app.register_blueprint(admin, url_prefix="/api/admin")
     app.register_blueprint(admin_tree_bp, url_prefix="/api/admin/tree")
     app.register_blueprint(admin_wallet_bp, url_prefix="/api/admin/wallet")
@@ -126,7 +150,7 @@ def create_app():
     app.register_blueprint(admin_backup_bp, url_prefix="/api/admin/backup")
 
     # -----------------------------
-    # Login Manager
+    # 4. Login Manager
     # -----------------------------
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
@@ -152,7 +176,7 @@ def create_app():
         return None
 
     # -----------------------------
-    # Error Handlers
+    # 5. Error Handlers
     # -----------------------------
     @app.errorhandler(404)
     def page_not_found(e):

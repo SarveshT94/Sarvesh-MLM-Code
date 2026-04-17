@@ -1,67 +1,148 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
-<title>Withdraw Requests</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Withdraw Requests | MLM System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; color: #334155; overflow-x: hidden; }
+        .sidebar { height: 100vh; width: 260px; position: fixed; top: 0; left: 0; background: #0f172a; color: #f8fafc; padding: 1.5rem 1rem; z-index: 1000; }
+        .sidebar-brand { font-size: 1.25rem; font-weight: 700; margin-bottom: 2.5rem; padding-left: 0.5rem; display: flex; align-items: center; gap: 0.75rem; color: #ffffff; }
+        .sidebar-brand i { color: #3b82f6; font-size: 1.5rem; }
+        .nav-link { color: #94a3b8; font-weight: 500; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.75rem; transition: all 0.2s ease-in-out; text-decoration: none; }
+        .nav-link:hover, .nav-link.active { color: #ffffff; background: #1e293b; }
+        .main-content { margin-left: 260px; padding: 2rem; min-height: 100vh; }
+        .page-header { margin-bottom: 1.5rem; }
+        .page-header h4 { font-weight: 700; color: #0f172a; margin: 0; }
+        .table-card { background: #ffffff; border-radius: 1rem; padding: 1.5rem; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .table { margin-bottom: 0; }
+        .table thead th { background-color: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; padding: 1rem; }
+        .table tbody td { padding: 1rem; vertical-align: middle; color: #334155; border-bottom: 1px solid #f1f5f9; }
+        .user-name { font-weight: 600; color: #0f172a; }
+        .amount-text { font-weight: 700; color: #0f172a; font-size: 1.1rem; }
+        .net-amount { font-weight: 700; color: #16a34a; font-size: 1.2rem; }
+        .deduction-text { font-size: 0.8rem; color: #ef4444; }
+        .status-badge { padding: 0.4em 0.8em; border-radius: 2rem; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .badge-pending { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+        .btn-action { font-size: 0.85rem; padding: 0.4rem 0.75rem; border-radius: 0.4rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.3rem; }
+    </style>
 </head>
-
 <body>
+    <nav class="sidebar">
+        <div class="sidebar-brand"><i class="bi bi-hexagon-fill"></i><span>MLM Admin</span></div>
+        <div class="nav flex-column">
+            <a href="/" class="nav-link"><i class="bi bi-grid-1x2"></i> Dashboard</a>
+            <a href="/admin/users" class="nav-link"><i class="bi bi-people"></i> Users</a>
+            <a href="/admin/packages" class="nav-link"><i class="bi bi-box-seam"></i> Manage Plans</a>
+            <a href="/admin/withdraws" class="nav-link active"><i class="bi bi-cash-stack"></i> Withdrawals</a>
+            <a href="/admin/kyc" class="nav-link"><i class="bi bi-shield-check"></i> KYC</a>
+            <a href="/admin/reports" class="nav-link"><i class="bi bi-bar-chart"></i> Reports</a>
+        </div>
+    </nav>
+    <main class="main-content">
+        <div class="page-header d-flex justify-content-between align-items-center">
+            <div>
+                <h4>💸 Payout Requests</h4>
+                <p class="text-muted mb-0 mt-1">Review payouts and export bank transfer sheets.</p>
+            </div>
+            <button class="btn btn-success shadow-sm fw-medium" onclick="exportBankSheet()">
+                <i class="bi bi-file-earmark-excel me-2"></i> Bulk Bank Export
+            </button>
+        </div>
+        <div class="table-card">
+            <div class="table-responsive">
+                <table class="table table-hover" id="payoutTable">
+                    <thead>
+                        <tr>
+                            <th>Req ID</th>
+                            <th>User Details</th>
+                            <th>Requested At</th>
+                            <th>Gross Amount</th>
+                            <th>Deductions</th>
+                            <th>Net Payable</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for req in requests %}
+                        <tr>
+                            <td class="fw-semibold text-muted">#{{ req.id }}</td>
+                            <td>
+                                <div class="user-name">{{ req.full_name }}</div>
+                                <div class="text-muted small"><i class="bi bi-person-badge me-1"></i> ID: {{ req.user_id }}</div>
+                                <div class="text-muted small phone-data"><i class="bi bi-telephone me-1"></i> {{ req.phone }}</div>
+                            </td>
+                            <td>
+                                <div class="text-muted small"><i class="bi bi-clock me-1"></i> {{ req.created_at.strftime('%Y-%m-%d %H:%M') if req.created_at else 'N/A' }}</div>
+                                <span class="status-badge badge-pending mt-1 d-inline-block">Pending</span>
+                            </td>
+                            <td><div class="amount-text">₹{{ "%.2f"|format(req.amount) }}</div></td>
+                            <td>
+                                <div class="deduction-text">- ₹{{ "%.2f"|format(req.tds_amount) }} (TDS)</div>
+                                <div class="deduction-text">- ₹{{ "%.2f"|format(req.admin_fee) }} (Admin)</div>
+                            </td>
+                            <td><div class="net-amount" data-net="{{ req.net_payable }}">₹{{ "%.2f"|format(req.net_payable) }}</div></td>
+                            <td class="text-end">
+                                <a href="/payouts/approve/{{ req.id }}" class="btn btn-success btn-action text-white mb-1"><i class="bi bi-check-circle"></i> Approve</a>
+                                <br>
+                                <form action="/payouts/reject/{{ req.id }}" method="POST" class="d-inline">
+                                    <input type="hidden" name="reason" value="Rejected by Admin during review">
+                                    <button type="submit" class="btn btn-outline-danger btn-action"><i class="bi bi-x-circle"></i> Reject & Refund</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                                No pending payout requests.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
 
-<h1>Admin - Withdraw Requests</h1>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+        function exportBankSheet() {
+            const data = [];
+            const rows = document.querySelectorAll("#payoutTable tbody tr");
+            
+            // Standard Bank Bulk Transfer Format
+            data.push(["Beneficiary Name", "Phone Number", "Net Payable Amount (INR)", "Remarks"]);
 
-<table border="1">
+            let hasData = false;
+            rows.forEach(row => {
+                const nameDiv = row.querySelector(".user-name");
+                if (nameDiv) {
+                    hasData = true;
+                    const name = nameDiv.innerText.trim();
+                    const phone = row.querySelector(".phone-data").innerText.replace(/[^0-9]/g, '');
+                    const netAmt = row.querySelector(".net-amount").getAttribute("data-net");
+                    
+                    data.push([name, phone, netAmt, "MLM Payout"]);
+                }
+            });
 
-<tr>
-<th>ID</th>
-<th>User ID</th>
-<th>Name</th>
-<th>Phone</th>
-<th>Amount</th>
-<th>Status</th>
-<th>Requested At</th>
-<th>Action</th>
-</tr>
+            if (!hasData) {
+                alert("No pending records to export.");
+                return;
+            }
 
-{% for req in requests %}
-
-<tr>
-
-<td>{{ req.id }}</td>
-<td>{{ req.user_id }}</td>
-<td>{{ req.full_name }}</td>
-<td>{{ req.phone }}</td>
-<td>{{ req.amount }}</td>
-<td>{{ req.status }}</td>
-<td>{{ req.requested_at }}</td>
-
-<td>
-
-{% if req.status == "pending" %}
-
-<a href="/admin/withdraw/approve/{{ req.id }}">
-Approve
-</a>
-
-|
-
-<a href="/admin/withdraw/reject/{{ req.id }}">
-Reject
-</a>
-
-{% else %}
-
-Processed
-
-{% endif %}
-
-</td>
-
-</tr>
-
-{% endfor %}
-
-</table>
-
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            XLSX.utils.book_append_sheet(wb, ws, "Bank Export");
+            XLSX.writeFile(wb, "Pending_Payouts_Bank_Export.xlsx");
+        }
+    </script>
 </body>
-
 </html>
