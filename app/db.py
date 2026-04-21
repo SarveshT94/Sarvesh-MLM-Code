@@ -2,59 +2,48 @@ import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from contextlib import contextmanager
-from app.config import Config
+from app.config.config import get_config
 import logging
+import time
 
+config = get_config()
 logger = logging.getLogger(__name__)
 
-# Enterprise Connection Pool (Global Singleton)
 _connection_pool = None
 
 
 def init_db_pool():
-    """
-    Initializes a reusable connection pool.
-    """
     global _connection_pool
 
     if _connection_pool is None:
         try:
             _connection_pool = psycopg2.pool.ThreadedConnectionPool(
-                minconn=1,
+                minconn=2,
                 maxconn=20,
-                dbname=Config.DB_NAME,
-                user=Config.DB_USER,
-                password=Config.DB_PASSWORD,
-                host=Config.DB_HOST,
-                port=Config.DB_PORT,
+                dbname=config.DB_NAME,
+                user=config.DB_USER,
+                password=config.DB_PASSWORD,
+                host=config.DB_HOST,
+                port=config.DB_PORT,
                 connect_timeout=5
             )
-            logger.info("Database connection pool initialized.")
+            logger.info("✅ Database connection pool initialized")
 
         except Exception as e:
-            logger.error(f"Database pool initialization error: {str(e)}")
+            logger.critical(f"❌ DB pool init failed: {str(e)}")
             raise
 
 
 def close_db_pool():
-    """
-    Gracefully closes all connections (use during app shutdown).
-    """
     global _connection_pool
 
     if _connection_pool:
         _connection_pool.closeall()
-        logger.info("Database connection pool closed.")
+        logger.info("✅ Database connection pool closed")
 
 
 @contextmanager
 def get_cursor():
-    """
-    Enterprise-safe DB cursor manager:
-    - Uses connection pooling
-    - Returns dict rows
-    - Auto commit / rollback
-    """
     global _connection_pool
 
     if _connection_pool is None:
@@ -62,28 +51,37 @@ def get_cursor():
 
     conn = None
     cursor = None
+    start_time = time.time()
 
     try:
-        # Borrow connection
         conn = _connection_pool.getconn()
 
-        # Create cursor
+        # Health check (important)
+        if conn.closed:
+            logger.warning("⚠️ Reconnecting closed DB connection")
+            conn = _connection_pool.getconn()
+
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
         yield cursor
 
-        # Commit after success
         conn.commit()
 
     except Exception as e:
         if conn:
             conn.rollback()
-        logger.error(f"Database transaction error: {str(e)}")
+
+        logger.error(f"❌ DB transaction failed: {str(e)}")
         raise
 
     finally:
-        # Cleanup safely
+        duration = round((time.time() - start_time) * 1000, 2)
+
+        if duration > 500:
+            logger.warning(f"⚠️ Slow query detected: {duration} ms")
+
         if cursor:
             cursor.close()
+
         if conn:
             _connection_pool.putconn(conn)

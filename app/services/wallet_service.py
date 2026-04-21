@@ -1,46 +1,44 @@
 from app.db import get_cursor
 from decimal import Decimal
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-# -----------------------------------
-# INTERNAL: Calculate Balance
-# -----------------------------------
+# =========================================================
+# INTERNAL BALANCE CALCULATION
+# =========================================================
 def _calculate_balance(cur, user_id):
     cur.execute("""
-        SELECT 
-            COALESCE(SUM(CASE WHEN transaction_type LIKE '%%credit%%' THEN amount ELSE 0 END), 0) as total_in,
-            COALESCE(SUM(CASE WHEN transaction_type LIKE '%%debit%%' THEN amount ELSE 0 END), 0) as total_out
+        SELECT COALESCE(SUM(
+            CASE 
+                WHEN transaction_type = 'credit' THEN amount
+                WHEN transaction_type = 'debit' THEN -amount
+            END
+        ), 0) as balance
         FROM wallet_ledger
         WHERE user_id = %s
     """, (user_id,))
 
     result = cur.fetchone()
-
-    total_in = Decimal(str(result['total_in']))
-    total_out = Decimal(str(result['total_out']))
-
-    return total_in - total_out
+    return Decimal(str(result["balance"]))
 
 
-# -----------------------------------
-# Get Wallet Balance (Flexible)
-# -----------------------------------
+# =========================================================
+# PUBLIC BALANCE
+# =========================================================
 def get_wallet_balance(cur, user_id):
-    """
-    MUST be called with cursor (enterprise standard)
-    Returns Decimal
-    """
     return _calculate_balance(cur, user_id)
 
 
-# -----------------------------------
-# Wallet History (API Safe)
-# -----------------------------------
+# =========================================================
+# WALLET HISTORY
+# =========================================================
 def get_wallet_history(user_id):
     try:
         with get_cursor() as cur:
             cur.execute("""
-                SELECT id, amount, transaction_type, reference, created_at
+                SELECT id, amount, transaction_type, reference_id, description, closing_balance, created_at
                 FROM wallet_ledger
                 WHERE user_id = %s
                 ORDER BY created_at DESC
@@ -59,18 +57,20 @@ def get_wallet_history(user_id):
         }
 
 
-# -----------------------------------
-# Debit Wallet (CORE - TRANSACTION SAFE)
-# -----------------------------------
-def debit_wallet(cur, user_id, amount, reference="", description=""):
-    """
-    MUST be used inside transaction
-    """
+# =========================================================
+# CORE LEDGER ENGINE (IMMUTABLE + IDEMPOTENT)
+# =========================================================
+def _create_ledger_entry(cur, user_id, amount, txn_type, reference, description):
 
-    amount = Decimal(str(amount))
+    # 🚨 Idempotency check
+    cur.execute("""
+        SELECT id FROM wallet_ledger
+        WHERE reference_id = %s
+        LIMIT 1
+    """, (reference,))
 
-    if amount <= 0:
-        raise Exception("Invalid debit amount")
+    if cur.fetchone():
+        raise Exception(f"Duplicate transaction reference: {reference}")
 
     # 🔒 Lock user
     cur.execute(
@@ -78,49 +78,61 @@ def debit_wallet(cur, user_id, amount, reference="", description=""):
         (user_id,)
     )
 
-    balance = _calculate_balance(cur, user_id)
+    current_balance = _calculate_balance(cur, user_id)
 
-    if balance < amount:
+    if txn_type == "debit" and current_balance < amount:
         raise Exception("Insufficient balance")
 
+    # Calculate closing balance
+    closing_balance = (
+        current_balance + amount if txn_type == "credit"
+        else current_balance - amount
+    )
+
+    # Immutable insert
     cur.execute("""
         INSERT INTO wallet_ledger
-        (user_id, amount, transaction_type, reference_id, description, created_at)
-        VALUES (%s, %s, %s, %s, %s, NOW())
+        (user_id, amount, transaction_type, reference_id, description, closing_balance, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW())
     """, (
         user_id,
         amount,
-        "debit",
-        reference or "wallet_debit",
-        description or "Wallet debit"
+        txn_type,
+        reference,
+        description,
+        closing_balance
     ))
 
-    return True
+    logger.info(
+        f"[LEDGER] user={user_id} type={txn_type} amount={amount} closing={closing_balance} ref={reference}"
+    )
+
+    return closing_balance
 
 
-# -----------------------------------
-# Credit Wallet (OPTIONAL - GOOD PRACTICE)
-# -----------------------------------
-def credit_wallet(cur, user_id, amount, reference="", description=""):
-    """
-    Standard credit function (use in commissions later)
-    """
-
+# =========================================================
+# CREDIT
+# =========================================================
+def credit_wallet(cur, user_id, amount, reference, description="credit"):
     amount = Decimal(str(amount))
 
     if amount <= 0:
         raise Exception("Invalid credit amount")
 
-    cur.execute("""
-        INSERT INTO wallet_ledger
-        (user_id, amount, transaction_type, reference_id, description, created_at)
-        VALUES (%s, %s, %s, %s, %s, NOW())
-    """, (
-        user_id,
-        amount,
-        "credit",
-        reference or "wallet_credit",
-        description or "Wallet credit"
-    ))
+    return _create_ledger_entry(
+        cur, user_id, amount, "credit", reference, description
+    )
 
-    return True
+
+# =========================================================
+# DEBIT
+# =========================================================
+def debit_wallet(cur, user_id, amount, reference, description="debit"):
+    amount = Decimal(str(amount))
+
+    if amount <= 0:
+        raise Exception("Invalid debit amount")
+
+    return _create_ledger_entry(
+        cur, user_id, amount, "debit", reference, description
+    )

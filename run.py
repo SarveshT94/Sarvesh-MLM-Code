@@ -1,4 +1,8 @@
 from app import create_app
+from app.utils.logger import setup_logging  # ✅ ADD THIS
+
+# Initialize logging BEFORE app starts
+setup_logging()  # ✅ ADD THIS
 
 app = create_app()
 
@@ -7,5 +11,5 @@ if __name__ == "__main__":
         host="127.0.0.1",
         port=5000,
         debug=True,
-        use_reloader=True   # ✅ FIXED
+        use_reloader=True
     )

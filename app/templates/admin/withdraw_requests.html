@@ -28,7 +28,12 @@
         .net-amount { font-weight: 700; color: #16a34a; font-size: 1.2rem; }
         .deduction-text { font-size: 0.8rem; color: #ef4444; }
         .status-badge { padding: 0.4em 0.8em; border-radius: 2rem; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        /* ✅ NEW: Colors for different statuses */
         .badge-pending { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+        .badge-approved { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+        .badge-rejected { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+        
         .btn-action { font-size: 0.85rem; padding: 0.4rem 0.75rem; border-radius: 0.4rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.3rem; }
     </style>
 </head>
@@ -45,6 +50,18 @@
         </div>
     </nav>
     <main class="main-content">
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show shadow-sm" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
         <div class="page-header d-flex justify-content-between align-items-center">
             <div>
                 <h4>💸 Payout Requests</h4>
@@ -53,7 +70,7 @@
             <button class="btn btn-success shadow-sm fw-medium" onclick="exportBankSheet()">
                 <i class="bi bi-file-earmark-excel me-2"></i> Bulk Bank Export
             </button>
-        </div>
+      </div>
         <div class="table-card">
             <div class="table-responsive">
                 <table class="table table-hover" id="payoutTable">
@@ -69,6 +86,7 @@
                         </tr>
                     </thead>
                     <tbody>
+                        <p class="text-muted mb-3 fw-bold">Total Requests: {{ requests | length }}</p>
                         {% for req in requests %}
                         <tr>
                             <td class="fw-semibold text-muted">#{{ req.id }}</td>
@@ -78,8 +96,17 @@
                                 <div class="text-muted small phone-data"><i class="bi bi-telephone me-1"></i> {{ req.phone }}</div>
                             </td>
                             <td>
-                                <div class="text-muted small"><i class="bi bi-clock me-1"></i> {{ req.created_at.strftime('%Y-%m-%d %H:%M') if req.created_at else 'N/A' }}</div>
-                                <span class="status-badge badge-pending mt-1 d-inline-block">Pending</span>
+                                <div class="text-muted small"><i class="bi bi-clock me-1"></i> {{ req.requested_at.strftime('%Y-%m-%d %H:%M') if req.requested_at else 'N/A' }}</div>
+                                
+                                {% if req.status == 'pending' %}
+                                    <span class="status-badge badge-pending mt-1 d-inline-block">Pending</span>
+                                {% elif req.status == 'approved' %}
+                                    <span class="status-badge badge-approved mt-1 d-inline-block">Approved</span>
+                                {% elif req.status == 'rejected' %}
+                                    <span class="status-badge badge-rejected mt-1 d-inline-block">Rejected</span>
+                                {% else %}
+                                    <span class="status-badge mt-1 d-inline-block">{{ req.status }}</span>
+                                {% endif %}
                             </td>
                             <td><div class="amount-text">₹{{ "%.2f"|format(req.amount) }}</div></td>
                             <td>
@@ -88,19 +115,23 @@
                             </td>
                             <td><div class="net-amount" data-net="{{ req.net_payable }}">₹{{ "%.2f"|format(req.net_payable) }}</div></td>
                             <td class="text-end">
-                                <a href="/payouts/approve/{{ req.id }}" class="btn btn-success btn-action text-white mb-1"><i class="bi bi-check-circle"></i> Approve</a>
-                                <br>
-                                <form action="/payouts/reject/{{ req.id }}" method="POST" class="d-inline">
-                                    <input type="hidden" name="reason" value="Rejected by Admin during review">
-                                    <button type="submit" class="btn btn-outline-danger btn-action"><i class="bi bi-x-circle"></i> Reject & Refund</button>
-                                </form>
+                                {% if req.status == 'pending' %}
+                                    <a href="/admin/withdraw/approve/{{ req.id }}" class="btn btn-success btn-action text-white mb-1"><i class="bi bi-check-circle"></i> Approve</a>
+                                    <br>
+                                    <form action="/admin/withdraw/reject/{{ req.id }}" method="POST" class="d-inline">
+                                        <input type="hidden" name="reason" value="Rejected by Admin during review">
+                                        <button type="submit" class="btn btn-outline-danger btn-action"><i class="bi bi-x-circle"></i> Reject</button>
+                                    </form>
+                                {% else %}
+                                    <span class="text-muted small fst-italic">Processed</span>
+                                {% endif %}
                             </td>
                         </tr>
                         {% else %}
                         <tr>
                             <td colspan="7" class="text-center py-5 text-muted">
                                 <i class="bi bi-inbox fs-1 d-block mb-3"></i>
-                                No pending payout requests.
+                                No payout requests found.
                             </td>
                         </tr>
                         {% endfor %}
@@ -116,32 +147,32 @@
         function exportBankSheet() {
             const data = [];
             const rows = document.querySelectorAll("#payoutTable tbody tr");
-            
-            // Standard Bank Bulk Transfer Format
+
             data.push(["Beneficiary Name", "Phone Number", "Net Payable Amount (INR)", "Remarks"]);
 
             let hasData = false;
             rows.forEach(row => {
                 const nameDiv = row.querySelector(".user-name");
                 if (nameDiv) {
+                    // Only export if it is marked as approved or pending (optional logic adjustment here)
                     hasData = true;
                     const name = nameDiv.innerText.trim();
                     const phone = row.querySelector(".phone-data").innerText.replace(/[^0-9]/g, '');
                     const netAmt = row.querySelector(".net-amount").getAttribute("data-net");
-                    
+
                     data.push([name, phone, netAmt, "MLM Payout"]);
                 }
             });
 
             if (!hasData) {
-                alert("No pending records to export.");
+                alert("No records to export.");
                 return;
             }
 
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(data);
             XLSX.utils.book_append_sheet(wb, ws, "Bank Export");
-            XLSX.writeFile(wb, "Pending_Payouts_Bank_Export.xlsx");
+            XLSX.writeFile(wb, "Payouts_Bank_Export.xlsx");
         }
     </script>
 </body>

@@ -21,7 +21,10 @@ def verify_password(password_hash: str, password: str) -> bool:
         pass
 
     # Fallback (old hashes)
-    return check_password_hash(password_hash, password)
+    try:
+        return check_password_hash(password_hash, password)
+    except Exception:
+        return False
 
 
 # -----------------------------------
@@ -29,7 +32,9 @@ def verify_password(password_hash: str, password: str) -> bool:
 # -----------------------------------
 import jwt
 from datetime import datetime, timedelta
-from app.config.config import Config   # ✅ FIXED IMPORT
+from app.config.config import get_config
+
+config = get_config()
 
 
 def create_access_token(data: dict) -> str:
@@ -37,35 +42,40 @@ def create_access_token(data: dict) -> str:
     try:
         to_encode = data.copy()
 
-        expire = datetime.utcnow() + timedelta(
-            minutes=Config.JWT_EXPIRE_MINUTES
-        )
+        now = datetime.utcnow()
+        expire = now + timedelta(minutes=config.JWT_EXPIRE_MINUTES)
 
         to_encode.update({
             "exp": expire,
-            "iat": datetime.utcnow()
+            "iat": now,
+            "type": "access"   # future-proofing
         })
 
         token = jwt.encode(
             to_encode,
-            Config.JWT_SECRET,
+            config.JWT_SECRET,
             algorithm="HS256"
         )
 
         return token
 
     except Exception as e:
-        raise Exception(f"Token creation failed: {str(e)}")
+        raise RuntimeError(f"Token creation failed: {str(e)}")
 
 
 def decode_access_token(token: str):
-    """Decode JWT token"""
+    """Decode JWT token with strict validation"""
     try:
         decoded = jwt.decode(
             token,
-            Config.JWT_SECRET,
+            config.JWT_SECRET,
             algorithms=["HS256"]
         )
+
+        # Optional: enforce token type
+        if decoded.get("type") != "access":
+            return None
+
         return decoded
 
     except jwt.ExpiredSignatureError:

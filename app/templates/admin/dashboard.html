@@ -4,82 +4,258 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard | MLM System</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+
     <style>
-        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; color: #334155; overflow-x: hidden; }
-        .sidebar { height: 100vh; width: 260px; position: fixed; top: 0; left: 0; background: #0f172a; color: #f8fafc; padding: 1.5rem 1rem; z-index: 1000; box-shadow: 4px 0 15px rgba(0,0,0,0.05); }
-        .sidebar-brand { font-size: 1.25rem; font-weight: 700; margin-bottom: 2.5rem; padding-left: 0.5rem; display: flex; align-items: center; gap: 0.75rem; color: #ffffff; }
-        .sidebar-brand i { color: #3b82f6; font-size: 1.5rem; }
-        .nav-link { color: #94a3b8; font-weight: 500; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.75rem; transition: all 0.2s ease-in-out; text-decoration: none; }
-        .nav-link:hover, .nav-link.active { color: #ffffff; background: #1e293b; }
-        .nav-link i { font-size: 1.1rem; }
-        .main-content { margin-left: 260px; padding: 2rem; min-height: 100vh; }
-        .topbar { background: #ffffff; padding: 1rem 1.5rem; border-radius: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; }
-        .topbar-title h4 { margin: 0; font-weight: 600; color: #0f172a; }
-        a.stat-card-link { text-decoration: none; display: block; }
-        .stat-card { background: #ffffff; border-radius: 1rem; padding: 1.5rem; border: none; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03); display: flex; align-items: center; transition: transform 0.2s ease, box-shadow 0.2s ease; cursor: pointer; }
-        .stat-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.08); }
-        .icon-box { width: 60px; height: 60px; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center; font-size: 1.75rem; margin-right: 1.25rem; flex-shrink: 0; }
+        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
+
+        .sidebar {
+            height: 100vh;
+            width: 260px;
+            position: fixed;
+            background: #0f172a;
+            color: #fff;
+            padding: 1.5rem;
+        }
+
+        .nav-link { color: #94a3b8; padding: 10px; display: block; border-radius: 8px; }
+        .nav-link:hover, .nav-link.active { background: #1e293b; color: #fff; }
+
+        .main-content { margin-left: 260px; padding: 2rem; }
+
+        .stat-card {
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 5px 10px rgba(0,0,0,0.05);
+            transition: 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.08);
+        }
+
+        .icon-box {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            font-size: 22px;
+            margin-right: 15px;
+        }
+
         .bg-blue-light { background: #eff6ff; color: #3b82f6; }
-        .bg-green-light { background: #f0fdf4; color: #22c55e; }
+        .bg-green-light { background: #ecfdf5; color: #22c55e; }
         .bg-purple-light { background: #faf5ff; color: #a855f7; }
         .bg-orange-light { background: #fff7ed; color: #f97316; }
-        .stat-info h6 { color: #64748b; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem; text-transform: uppercase; letter-spacing: 0.5px; }
-        .stat-info h2 { color: #0f172a; margin: 0; font-weight: 700; font-size: 1.75rem; }
-        .quick-actions-card { background: #ffffff; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .btn-custom { padding: 0.6rem 1.25rem; border-radius: 0.5rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.5rem; transition: all 0.2s; }
-        .btn-custom:hover { transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .bg-red-light { background: #fee2e2; color: #dc2626; }
+
+        .quick-actions-card {
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+
+        #riskPanel {
+            display: none;
+            margin-top: 20px;
+        }
     </style>
 </head>
+
 <body>
-    <nav class="sidebar">
-        <div class="sidebar-brand"><i class="bi bi-hexagon-fill"></i><span>MLM Admin</span></div>
-        <div class="nav flex-column">
-            <a href="/" class="nav-link active"><i class="bi bi-grid-1x2"></i> Dashboard</a>
-            <a href="/admin/users" class="nav-link"><i class="bi bi-people"></i> Users</a>
-            <a href="/admin/packages" class="nav-link"><i class="bi bi-box-seam"></i> Manage Plans</a>
-            <a href="/admin/withdraws" class="nav-link"><i class="bi bi-cash-stack"></i> Withdrawals</a>
-            <a href="/admin/kyc" class="nav-link"><i class="bi bi-shield-check"></i> KYC</a>
-            <a href="/admin/reports" class="nav-link"><i class="bi bi-bar-chart"></i> Reports</a>
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+    <h4>MLM Admin</h4>
+    <a href="/" class="nav-link active">Dashboard</a>
+    <a href="/admin/users" class="nav-link">Users</a>
+    <a href="/admin/withdraws" class="nav-link">Withdraw</a>
+    <a href="/admin/kyc" class="nav-link">KYC</a>
+    <a href="/admin/risk-monitor" class="nav-link">🚨 Risk Monitor</a>
+</nav>
+
+<!-- MAIN -->
+<div class="main-content">
+
+    <h3>Dashboard Overview</h3>
+
+    <!-- STATS -->
+    <div class="row g-3">
+
+        <div class="col-md-3">
+            <a href="/admin/users" class="text-decoration-none">
+                <div class="stat-card">
+                    <div class="icon-box bg-blue-light"><i class="bi bi-people"></i></div>
+                    <div>
+                        <small>Total Users</small>
+                        <h4>{{ stats.total_users }}</h4>
+                    </div>
+                </div>
+            </a>
         </div>
-    </nav>
-    <main class="main-content">
-        <div class="topbar">
-            <div class="topbar-title">
-                <h4>Dashboard Overview</h4>
-                <small class="text-muted">Welcome back, {{ admin_name | default('Suresh') }} 👋</small>
-            </div>
-            <div class="d-flex align-items-center gap-3">
-                <span class="badge bg-light text-dark border px-3 py-2 rounded-pill">Version 1.0</span>
-                <div class="dropdown">
-                    <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center dropdown-toggle" style="width: 40px; height: 40px; font-weight: bold; cursor: pointer;" id="profileMenu" data-bs-toggle="dropdown" aria-expanded="false">S</div>
-                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2" aria-labelledby="profileMenu">
-                        <li><h6 class="dropdown-header">Logged in as Suresh</h6></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item text-danger" href="#"><i class="bi bi-box-arrow-right me-2"></i> Logout</a></li>
-                    </ul>
+
+        <div class="col-md-3">
+            <a href="/admin/users" class="text-decoration-none">
+                <div class="stat-card">
+                    <div class="icon-box bg-green-light"><i class="bi bi-person-check"></i></div>
+                    <div>
+                        <small>Active Users</small>
+                        <h4>{{ stats.active_users }}</h4>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-md-3">
+            <a href="/admin/commission-logs" class="text-decoration-none">
+                <div class="stat-card">
+                    <div class="icon-box bg-purple-light"><i class="bi bi-currency-rupee"></i></div>
+                    <div>
+                        <small>Commissions</small>
+                        <h4>₹{{ stats.total_commission }}</h4>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-md-3">
+            <a href="/admin/withdraws" class="text-decoration-none">
+                <div class="stat-card">
+                    <div class="icon-box bg-orange-light"><i class="bi bi-wallet"></i></div>
+                    <div>
+                        <small>Withdraw Requests</small>
+                        <h4>{{ stats.withdraw_requests }}</h4>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- 🚨 NEW RISK CARD -->
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="icon-box bg-red-light">
+                    <i class="bi bi-shield-exclamation"></i>
+                </div>
+                <div>
+                    <small>Risk System</small>
+                    <h5 class="text-danger">Monitor</h5>
+
+                    <a href="/admin/risk-monitor" class="btn btn-sm btn-outline-danger mt-1">
+                        Open
+                    </a>
                 </div>
             </div>
         </div>
-        <div class="row g-4 mb-4">
-            <div class="col-xl-3 col-lg-6"><a href="/admin/users" class="stat-card-link"><div class="stat-card"><div class="icon-box bg-blue-light"><i class="bi bi-people-fill"></i></div><div class="stat-info"><h6>Total Users</h6><h2>{{ stats.total_users }}</h2></div></div></a></div>
-            <div class="col-xl-3 col-lg-6"><a href="/admin/users" class="stat-card-link"><div class="stat-card"><div class="icon-box bg-green-light"><i class="bi bi-person-check-fill"></i></div><div class="stat-info"><h6>Active Users</h6><h2>{{ stats.active_users }}</h2></div></div></a></div>
-            <div class="col-xl-3 col-lg-6"><a href="/admin/commission-logs" class="stat-card-link"><div class="stat-card"><div class="icon-box bg-purple-light"><i class="bi bi-currency-rupee"></i></div><div class="stat-info"><h6>Commissions</h6><h2>₹{{ stats.total_commissions }}</h2></div></div></a></div>
-            <div class="col-xl-3 col-lg-6"><a href="/admin/withdraws" class="stat-card-link"><div class="stat-card"><div class="icon-box bg-orange-light"><i class="bi bi-wallet2"></i></div><div class="stat-info"><h6>Withdraw Requests</h6><h2>{{ stats.withdraw_requests }}</h2></div></div></a></div>
+
+    </div>
+
+    <!-- ACTIONS -->
+    <div class="quick-actions-card">
+        <h5>⚡ Quick Actions</h5>
+
+        <a href="/admin/users" class="btn btn-primary m-1">Users</a>
+        <a href="/admin/withdraws" class="btn btn-warning m-1">Withdrawals</a>
+        <a href="/admin/kyc" class="btn btn-success m-1">KYC</a>
+
+        <button onclick="toggleRisk()" class="btn btn-danger m-1">
+            🚨 Quick Risk View
+        </button>
+    </div>
+
+    <!-- RISK PANEL (UNCHANGED CORE LOGIC) -->
+    <div id="riskPanel" class="quick-actions-card">
+
+        <div class="d-flex justify-content-between">
+            <h5>🚨 Risk Intelligence</h5>
+
+            <select id="riskFilter" class="form-select w-auto">
+                <option value="all">All</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+            </select>
         </div>
-        <div class="quick-actions-card">
-            <h5 class="mb-4 fw-bold" style="color: #0f172a;">⚡ Quick Actions</h5>
-            <div class="d-flex flex-wrap gap-3">
-                <a href="/admin/users" class="btn btn-primary btn-custom"><i class="bi bi-person-plus"></i> Manage Users</a>
-                <a href="/admin/withdraws" class="btn btn-warning text-dark btn-custom border-0" style="background-color: #fbbf24;"><i class="bi bi-cash-stack"></i> Review Withdrawals</a>
-                <a href="/admin/kyc" class="btn btn-success btn-custom"><i class="bi bi-shield-check"></i> Verify KYC</a>
-            </div>
-        </div>
-    </main>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+        <table class="table mt-3">
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Email</th>
+                    <th>Score</th>
+                    <th>Risk</th>
+                </tr>
+            </thead>
+            <tbody id="riskTable"></tbody>
+        </table>
+
+    </div>
+
+</div>
+
+<script>
+let isVisible = false;
+let riskData = [];
+
+function toggleRisk() {
+    const panel = document.getElementById("riskPanel");
+
+    isVisible = !isVisible;
+    panel.style.display = isVisible ? "block" : "none";
+
+    if (isVisible) loadRisk();
+}
+
+function loadRisk() {
+    fetch("/api/admin/risk-data")
+        .then(res => res.json())
+        .then(data => {
+            riskData = data.data || [];
+            render();
+        });
+}
+
+function render() {
+    const filter = document.getElementById("riskFilter").value;
+    const tbody = document.getElementById("riskTable");
+
+    tbody.innerHTML = "";
+
+    riskData
+        .filter(u => filter === "all" || u.status === filter)
+        .forEach(u => {
+
+            let color = "secondary";
+            if (u.status === "HIGH") color = "danger";
+            if (u.status === "MEDIUM") color = "warning";
+            if (u.status === "LOW") color = "success";
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>${u.name}</td>
+                    <td>${u.email}</td>
+                    <td>${u.risk_score}</td>
+                    <td><span class="badge bg-${color}">${u.status}</span></td>
+                </tr>
+            `;
+        });
+}
+
+document.getElementById("riskFilter").addEventListener("change", render);
+
+setInterval(() => {
+    if (isVisible) loadRisk();
+}, 10000);
+</script>
+
 </body>
 </html>
