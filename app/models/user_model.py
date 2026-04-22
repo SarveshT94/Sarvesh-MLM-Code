@@ -10,14 +10,9 @@ def get_user_by_email(email):
     """Fetch a user by their email address."""
     try:
         email = email.lower().strip()
-
         with get_cursor() as cur:
-            cur.execute(
-                "SELECT * FROM users WHERE email = %s",
-                (email,)
-            )
+            cur.execute("SELECT * FROM users WHERE email = %s", (email,))
             return cur.fetchone()
-
     except Exception as e:
         logger.error(f"Error fetching user by email: {str(e)}")
         return None
@@ -30,14 +25,9 @@ def get_user_by_phone(phone):
     """Fetch a user by their phone number."""
     try:
         phone = phone.strip()
-
         with get_cursor() as cur:
-            cur.execute(
-                "SELECT * FROM users WHERE phone = %s",
-                (phone,)
-            )
+            cur.execute("SELECT * FROM users WHERE phone = %s", (phone,))
             return cur.fetchone()
-
     except Exception as e:
         logger.error(f"Error fetching user by phone: {str(e)}")
         return None
@@ -50,12 +40,8 @@ def get_user_by_referral_code(referral_code):
     """Fetch a user by their unique referral code."""
     try:
         with get_cursor() as cur:
-            cur.execute(
-                "SELECT * FROM users WHERE referral_code = %s",
-                (referral_code,)
-            )
+            cur.execute("SELECT * FROM users WHERE referral_code = %s", (referral_code,))
             return cur.fetchone()
-
     except Exception as e:
         logger.error(f"Error fetching user by referral code: {str(e)}")
         return None
@@ -66,7 +52,7 @@ def get_user_by_referral_code(referral_code):
 # -----------------------------------
 def create_user(role_id, full_name, email, phone, password_hash, referral_code, sponsor_id):
     """
-    Creates a new user and safely commits the transaction.
+    Creates a new user. The global get_cursor() handles the commit automatically.
     """
     try:
         email = email.lower().strip()
@@ -79,21 +65,17 @@ def create_user(role_id, full_name, email, phone, password_hash, referral_code, 
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
             """, (
-                role_id,
-                full_name,
-                email,
-                phone,
-                password_hash,
-                referral_code,
-                sponsor_id
+                role_id, full_name, email, phone, password_hash, referral_code, sponsor_id
             ))
 
-            new_user_id = cur.fetchone()[0]
+            row = cur.fetchone()
+            # Safely grab the ID whether it returns as a Dictionary or a Tuple
+            new_user_id = row['id'] if isinstance(row, dict) else row[0]
 
-        logger.info(f"User created successfully: {email}")
-
+        logger.info(f"User created successfully and permanently saved: {email}")
         return new_user_id
 
     except Exception as e:
         logger.error(f"Error creating user: {str(e)}")
         return None
+

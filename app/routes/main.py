@@ -466,6 +466,25 @@ def admin_unblock_user(user_id):
 
     return redirect(url_for("main.risk_monitor"))
 
+
+# =========================================================
+# 🔐 AUTHENTICATION API (For Next.js)
+# =========================================================
+@main.route("/api/auth/me", methods=["GET"])
+def check_session():
+    if current_user.is_authenticated:
+        return jsonify({
+            "success": True,
+            "user": {
+                "id": current_user.id,
+                "email": current_user.email,
+                "full_name": current_user.full_name
+            }
+        }), 200
+    else:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+
 #______________________________________________________
 @main.route("/test/credit/<int:user_id>/<int:amount>")
 def test_credit(user_id, amount):

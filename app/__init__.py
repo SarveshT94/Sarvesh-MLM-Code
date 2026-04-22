@@ -42,7 +42,6 @@ logger = logging.getLogger(__name__)
 # -----------------------------------
 login_manager = LoginManager()
 
-# ✅ MAKE LIMITER GLOBAL (IMPORTANT)
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["200 per day", "50 per hour"]
@@ -57,7 +56,9 @@ class User(UserMixin):
         self.full_name = user_data.get('full_name')
         self.email = user_data.get('email')
         self.role_id = user_data.get('role_id')
-
+        # 🔥 ADD THESE TWO LINES:
+        self.phone = user_data.get('phone')
+        self.referral_code = user_data.get('referral_code')
 
 # -----------------------------------
 # Application Factory
@@ -65,43 +66,20 @@ class User(UserMixin):
 def create_app():
     app = Flask(__name__)
 
-    # -----------------------------
-    # 1. Configuration
-    # -----------------------------
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
 
     if not app.config["SECRET_KEY"]:
         raise ValueError("SECRET_KEY is not set in environment variables")
 
-    # -----------------------------
-    # 2. Init Extensions
-    # -----------------------------
-    limiter.init_app(app)   # ✅ correct way
+    limiter.init_app(app)
 
-    # ✅ Configure Content Security Policy to allow Bootstrap & Google Fonts
     csp = {
-        'default-src': [
-            '\'self\''
-        ],
-        'style-src': [
-            '\'self\'',
-            '\'unsafe-inline\'',
-            'https://cdn.jsdelivr.net',
-            'https://fonts.googleapis.com'
-        ],
-        'font-src': [
-            '\'self\'',
-            'https://fonts.gstatic.com',
-            'https://cdn.jsdelivr.net',
-            'data:'
-        ],
-        'script-src': [
-            '\'self\'',
-            '\'unsafe-inline\'',
-            'https://cdn.jsdelivr.net'
-        ]
+        'default-src': ['\'self\''],
+        'style-src': ['\'self\'', '\'unsafe-inline\'', 'https://cdn.jsdelivr.net', 'https://fonts.googleapis.com'],
+        'font-src': ['\'self\'', 'https://fonts.gstatic.com', 'https://cdn.jsdelivr.net', 'data:'],
+        'script-src': ['\'self\'', '\'unsafe-inline\'', 'https://cdn.jsdelivr.net']
     }
-    Talisman(app, content_security_policy=csp) # ✅ security headers updated
+    Talisman(app, content_security_policy=csp)
 
     CORS(
         app,
@@ -109,13 +87,10 @@ def create_app():
         supports_credentials=True
     )
 
-    # -----------------------------
-    # 3. Register Blueprints
-    # -----------------------------
+    # Register Blueprints
     from app.routes.auth_routes import auth_bp
     from app.routes.main import main
     from app.routes.admin_routes import admin
-
     from app.routes.admin.tree_routes import admin_tree_bp
     from app.routes.admin.wallet_routes import admin_wallet_bp
     from app.routes.admin.commission_routes import admin_commission_bp
@@ -128,14 +103,12 @@ def create_app():
     from app.routes.admin.support_routes import admin_support_bp
     from app.routes.admin.backup_routes import admin_backup_bp
     from app.routes.admin.package_routes import admin_package_bp
-
+    from app.routes.profile_routes import profile_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(admin_package_bp)
-    
-    # 🔥 CRITICAL FIX: Removed url_prefix="/api" so the dashboard loads at "/"
+    app.register_blueprint(profile_bp)
     app.register_blueprint(main)
-
     app.register_blueprint(admin, url_prefix="/api/admin")
     app.register_blueprint(admin_tree_bp, url_prefix="/api/admin/tree")
     app.register_blueprint(admin_wallet_bp, url_prefix="/api/admin/wallet")
@@ -149,9 +122,7 @@ def create_app():
     app.register_blueprint(admin_support_bp, url_prefix="/api/admin/support")
     app.register_blueprint(admin_backup_bp, url_prefix="/api/admin/backup")
 
-    # -----------------------------
-    # 4. Login Manager
-    # -----------------------------
+    # Login Manager
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
 
@@ -161,8 +132,9 @@ def create_app():
             from app.db import get_cursor
 
             with get_cursor() as cur:
+                # 🔥 ADD phone AND referral_code TO THIS QUERY:
                 cur.execute(
-                    "SELECT id, full_name, email, role_id FROM users WHERE id = %s",
+                    "SELECT id, full_name, email, phone, referral_code, role_id FROM users WHERE id = %s",
                     (user_id,)
                 )
                 user_data = cur.fetchone()
@@ -175,27 +147,18 @@ def create_app():
 
         return None
 
-    # -----------------------------
-    # 5. Error Handlers
-    # -----------------------------
+    # Error Handlers
     @app.errorhandler(404)
     def page_not_found(e):
         if request.path.startswith('/api/'):
-            return jsonify({
-                "status": "error",
-                "message": "API Endpoint Not Found"
-            }), 404
+            return jsonify({"status": "error", "message": "API Endpoint Not Found"}), 404
         return render_template("errors/404.html"), 404
 
     @app.errorhandler(500)
     def internal_server_error(e):
         logger.error(f"500 error: {str(e)}")
-
         if request.path.startswith('/api/'):
-            return jsonify({
-                "status": "error",
-                "message": "Internal Server Error"
-            }), 500
+            return jsonify({"status": "error", "message": "Internal Server Error"}), 500
         return render_template("errors/500.html"), 500
 
     return app

@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+/* Optional: You can add any custom global CSS rules here later */
+body {
+  margin: 0;
+  padding: 0;
+}

@@ -1,26 +1,35 @@
-# -----------------------------------
-# Password Hashing
-# -----------------------------------
+import bcrypt
 from werkzeug.security import check_password_hash
-from passlib.context import CryptContext
+import jwt
+from datetime import datetime, timedelta
+from app.config.config import get_config
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+config = get_config()
 
+# -----------------------------------
+# Password Hashing (Upgraded to Native Bcrypt)
+# -----------------------------------
 
 def hash_password(password: str) -> str:
-    """Hash password using bcrypt"""
-    return pwd_context.hash(password)
+    """Hash password using native bcrypt (bypassing broken passlib)"""
+    # bcrypt requires bytes, so we encode to utf-8 first
+    salt = bcrypt.gensalt()
+    hashed_bytes = bcrypt.hashpw(password.encode('utf-8'), salt)
+    
+    # Return as a standard string for the database
+    return hashed_bytes.decode('utf-8')
 
 
 def verify_password(password_hash: str, password: str) -> bool:
-    """Verify password (supports bcrypt + legacy werkzeug hashes)"""
+    """Verify password against native bcrypt or legacy werkzeug hashes"""
+    # 1. Try Native Bcrypt (Modern users)
     try:
-        if pwd_context.verify(password, password_hash):
+        if bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
             return True
     except Exception:
         pass
 
-    # Fallback (old hashes)
+    # 2. Try Fallback (Extremely old hashes)
     try:
         return check_password_hash(password_hash, password)
     except Exception:
@@ -30,12 +39,6 @@ def verify_password(password_hash: str, password: str) -> bool:
 # -----------------------------------
 # JWT Token Handling
 # -----------------------------------
-import jwt
-from datetime import datetime, timedelta
-from app.config.config import get_config
-
-config = get_config()
-
 
 def create_access_token(data: dict) -> str:
     """Generate JWT token"""
