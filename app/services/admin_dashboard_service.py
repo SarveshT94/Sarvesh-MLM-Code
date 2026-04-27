@@ -9,47 +9,46 @@ def get_dashboard_stats():
     Enterprise Analytics Engine:
     Maps perfectly to dashboard.html template variables.
     """
-    # 1. Set the exact keys expected by the dashboard.html template
     stats = {
         "total_users": 0,
         "active_users": 0,
-        "total_commissions": Decimal('0.00'),
+        "total_commissions": 0.00,
         "withdraw_requests": 0
     }
 
     try:
         with get_cursor() as cur:
-            # 2. Total Users (Counts EVERYONE, including Admins)
+            # 1. Total Users
             cur.execute("SELECT COUNT(*) as count FROM users")
             result = cur.fetchone()
             if result:
                 stats["total_users"] = result['count']
 
-            # 3. Active Users (Counts EVERYONE who is active)
+            # 2. Active Users
             cur.execute("SELECT COUNT(*) as count FROM users WHERE is_active = TRUE")
             result = cur.fetchone()
             if result:
                 stats["active_users"] = result['count']
 
-            # 4. Total Commissions Paid
+            # 3. Total Commissions Paid (🔥 FIXED: Casts to numeric and sums BOTH legacy and new tables)
             cur.execute("""
-                SELECT COALESCE(SUM(amount), 0) as total 
-                FROM wallet_ledger 
-                WHERE transaction_type = 'commission_credit'
+                SELECT 
+                    (SELECT COALESCE(SUM(amount::numeric), 0) FROM commissions) +
+                    (SELECT COALESCE(SUM(amount::numeric), 0) FROM wallet_ledger WHERE transaction_type ILIKE '%commission%')
+                AS grand_total
             """)
             result = cur.fetchone()
-            if result:
-                stats["total_commissions"] = Decimal(str(result['total']))
+            if result and result['grand_total']:
+                stats["total_commissions"] = float(result['grand_total'])
 
-            # 5. Pending Withdraw Requests
-            cur.execute("SELECT COUNT(*) as count FROM withdraw_requests WHERE status = 'Pending'")
+            # 4. Pending Withdraw Requests (🔥 FIXED: Bulletproof casing check)
+            cur.execute("SELECT COUNT(*) as count FROM withdraw_requests WHERE LOWER(status) IN ('pending', 'processing')")
             result = cur.fetchone()
             if result:
                 stats["withdraw_requests"] = result['count']
 
     except Exception as e:
-        # If the DB query fails, print the error to the terminal but STILL return the default 0s 
-        # so the dashboard doesn't crash completely.
-        print(f"🔥 Dashboard Stats Error: {str(e)}")
+        # If it crashes, this will loudly tell us exactly WHY in your terminal
+        print(f"\n{'='*50}\n🔥 DASHBOARD TILE CRASH:\n{str(e)}\n{'='*50}\n")
 
     return stats

@@ -1,145 +1,97 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Manage Users | MLM System</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; color: #334155; overflow-x: hidden; }
-        .sidebar { height: 100vh; width: 260px; position: fixed; top: 0; left: 0; background: #0f172a; color: #f8fafc; padding: 1.5rem 1rem; z-index: 1000; }
-        .sidebar-brand { font-size: 1.25rem; font-weight: 700; margin-bottom: 2.5rem; padding-left: 0.5rem; display: flex; align-items: center; gap: 0.75rem; color: #ffffff; }
-        .sidebar-brand i { color: #3b82f6; font-size: 1.5rem; }
-        .nav-link { color: #94a3b8; font-weight: 500; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.75rem; transition: all 0.2s ease-in-out; text-decoration: none; }
-        .nav-link:hover, .nav-link.active { color: #ffffff; background: #1e293b; }
-        .nav-link i { font-size: 1.1rem; }
-        .main-content { margin-left: 260px; padding: 2rem; min-height: 100vh; }
-        .header-actions { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1.5rem; }
-        .search-bar .form-control { border-radius: 0.5rem 0 0 0.5rem; border: 1px solid #e2e8f0; padding: 0.6rem 1rem; box-shadow: none; }
-        .search-bar .form-control:focus { border-color: #3b82f6; box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.1); }
-        .search-bar .btn { border-radius: 0 0.5rem 0.5rem 0; padding: 0.6rem 1.2rem; }
-        .table-card { background: #ffffff; border-radius: 1rem; padding: 1.5rem; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .table { margin-bottom: 0; }
-        .table thead th { background-color: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; padding: 1rem; }
-        .table tbody td { padding: 1rem; vertical-align: middle; color: #334155; border-bottom: 1px solid #f1f5f9; }
-        .user-name { font-weight: 600; color: #0f172a; }
-        .text-light-gray { color: #64748b; font-size: 0.9rem; }
-        .badge-status { padding: 0.4em 0.8em; border-radius: 2rem; font-weight: 500; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.3rem;}
-        .badge-active { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-        .badge-inactive { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-        .btn-action { font-size: 0.85rem; padding: 0.4rem 0.75rem; border-radius: 0.4rem; display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 500; }
-        .pagination { margin-bottom: 0; }
-        .page-link { color: #475569; border: 1px solid #e2e8f0; padding: 0.5rem 1rem; border-radius: 0.4rem; margin: 0 0.2rem; transition: all 0.2s;}
-        .page-link:hover { background-color: #f1f5f9; color: #0f172a; }
-        .page-item.active .page-link { background-color: #3b82f6; border-color: #3b82f6; color: white; }
-    </style>
-</head>
-<body>
-    <nav class="sidebar">
-        <div class="sidebar-brand"><i class="bi bi-hexagon-fill"></i><span>MLM Admin</span></div>
-        <div class="nav flex-column">
-            <a href="/" class="nav-link"><i class="bi bi-grid-1x2"></i> Dashboard</a>
-            <a href="/admin/users" class="nav-link active"><i class="bi bi-people"></i> Users</a>
-            <a href="/admin/packages" class="nav-link"><i class="bi bi-box-seam"></i> Manage Plans</a>
-            <a href="/admin/withdraws" class="nav-link"><i class="bi bi-cash-stack"></i> Withdrawals</a>
-            <a href="/admin/kyc" class="nav-link"><i class="bi bi-shield-check"></i> KYC</a>
-            <a href="/admin/reports" class="nav-link"><i class="bi bi-bar-chart"></i> Reports</a>
-        </div>
-    </nav>
-    <main class="main-content">
-        <div class="header-actions">
-            <div>
-                <h4 class="fw-bold mb-1" style="color: #0f172a;">👥 Manage Users</h4>
-                <p class="text-muted mb-0">Total System Users: <strong class="text-primary">{{ total }}</strong></p>
+{% extends "admin/base.html" %}
+
+{% block title %}Manage Users{% endblock %}
+{% block header_title %}Manage Users{% endblock %}
+
+{% block content %}
+<style>
+    .search-bar .form-control { border-radius: 0.5rem 0 0 0.5rem; border: 1px solid #e2e8f0; padding: 0.6rem 1rem; box-shadow: none; }
+    .search-bar .form-control:focus { border-color: #3b82f6; box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.1); }
+    .search-bar .btn { border-radius: 0 0.5rem 0.5rem 0; padding: 0.6rem 1.2rem; }
+    .table-card { background: #ffffff; border-radius: 1rem; padding: 1.5rem; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .table thead th { background-color: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; padding: 1rem; }
+    .table tbody td { padding: 1rem; vertical-align: middle; color: #334155; border-bottom: 1px solid #f1f5f9; }
+    .user-name { font-weight: 600; color: #0f172a; }
+    .badge-status { padding: 0.4em 0.8em; border-radius: 2rem; font-weight: 500; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.3rem;}
+    .badge-active { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .badge-inactive { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .btn-action { font-size: 0.85rem; padding: 0.4rem 0.75rem; border-radius: 0.4rem; display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 500; }
+</style>
+
+<div class="d-flex justify-content-between align-items-end mb-4">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: #0f172a;">👥 Manage Users</h4>
+        <p class="text-muted mb-0">Total System Users: <strong class="text-primary">{{ total }}</strong></p>
+    </div>
+    <div style="width: 350px;">
+        <form method="GET" action="/admin/users">
+            <div class="input-group search-bar">
+                <input type="text" name="q" value="{{ search }}" class="form-control" placeholder="Search name, email, or phone...">
+                <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i></button>
             </div>
-            <div style="width: 350px;">
-                <form method="GET" action="/admin/users">
-                    <div class="input-group search-bar">
-                        <input type="text" name="q" value="{{ search }}" class="form-control" placeholder="Search name, email, or phone...">
-                        <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i></button>
-                    </div>
-                </form>
-            </div>
-        </div>
+        </form>
+    </div>
+</div>
 
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-              <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-              </div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-
-        <div class="table-card">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>User ID</th>
-                            <th>Identity</th>
-                            <th>Contact Info</th>
-                            <th>Status</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for user in users %}
-                        <tr>
-                            <td class="fw-semibold text-muted">#{{ user.id }}</td>
-                            <td><div class="user-name">{{ user.full_name }}</div></td>
-                            <td>
-                                <div><i class="bi bi-envelope text-muted me-1"></i> {{ user.email }}</div>
-                                <div class="text-light-gray mt-1"><i class="bi bi-telephone-fill me-1" style="font-size: 0.8rem;"></i>{{ user.phone }}</div>
-                            </td>
-                            <td>
-                                {% if user.is_active %}
-                                    <span class="badge-status badge-active"><i class="bi bi-check-circle-fill"></i> Active</span>
-                                {% else %}
-                                    <span class="badge-status badge-inactive"><i class="bi bi-x-circle-fill"></i> Inactive</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end">
-                                <div class="d-flex justify-content-end gap-2">
-                                    <a href="/admin/user/team/{{ user.id }}" class="btn btn-outline-primary btn-action" title="View Team Structure">
-                                        <i class="bi bi-diagram-3"></i> Team
-                                    </a>
-
-                                    {% if user.is_active %}
-                                        <form action="/admin/user/deactivate/{{ user.id }}" method="POST" style="display:inline;">
-                                            <button type="submit" class="btn btn-outline-danger btn-action">
-                                                <i class="bi bi-person-x"></i> Deactivate
-                                            </button>
-                                        </form>
-                                    {% else %}
-                                        <form action="/admin/user/activate/{{ user.id }}" method="POST" style="display:inline;">
-                                            <button type="submit" class="btn btn-outline-success btn-action">
-                                                <i class="bi bi-person-check"></i> Activate
-                                            </button>
-                                        </form>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
+<div class="table-card">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>User ID</th>
+                    <th>Identity</th>
+                    <th>Contact Info</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td class="fw-semibold text-muted">#{{ user.id }}</td>
+                    <td><div class="user-name">{{ user.full_name }}</div></td>
+                    <td>
+                        <div><i class="bi bi-envelope text-muted me-1"></i> {{ user.email }}</div>
+                        <div class="text-muted mt-1 small"><i class="bi bi-telephone-fill me-1"></i>{{ user.phone }}</div>
+                    </td>
+                    <td>
+                        {% if user.is_active %}
+                            <span class="badge-status badge-active"><i class="bi bi-check-circle-fill"></i> Active</span>
                         {% else %}
-                        <tr>
-                            <td colspan="5" class="text-center py-5 text-muted">
-                                <i class="bi bi-people fs-1 d-block mb-3"></i>
-                                <h5>No users found</h5>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </main>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+                            <span class="badge-status badge-inactive"><i class="bi bi-x-circle-fill"></i> Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="/admin/user/team/{{ user.id }}" class="btn btn-outline-primary btn-action" title="View Team Structure">
+                                <i class="bi bi-diagram-3"></i> Team
+                            </a>
+                            {% if user.is_active %}
+                                <form action="/admin/user/deactivate/{{ user.id }}" method="POST" style="display:inline;">
+                                    <button type="submit" class="btn btn-outline-danger btn-action">
+                                        <i class="bi bi-person-x"></i> Deactivate
+                                    </button>
+                                </form>
+                            {% else %}
+                                <form action="/admin/user/activate/{{ user.id }}" method="POST" style="display:inline;">
+                                    <button type="submit" class="btn btn-outline-success btn-action">
+                                        <i class="bi bi-person-check"></i> Activate
+                                    </button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-center py-5 text-muted">
+                        <i class="bi bi-people fs-1 d-block mb-3"></i>
+                        <h5>No users found</h5>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

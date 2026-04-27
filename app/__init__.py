@@ -56,7 +56,6 @@ class User(UserMixin):
         self.full_name = user_data.get('full_name')
         self.email = user_data.get('email')
         self.role_id = user_data.get('role_id')
-        # 🔥 ADD THESE TWO LINES:
         self.phone = user_data.get('phone')
         self.referral_code = user_data.get('referral_code')
 
@@ -81,10 +80,16 @@ def create_app():
     }
     Talisman(app, content_security_policy=csp)
 
+    # =======================================================
+    # 🔥 BULLETPROOF CORS CONFIGURATION
+    # This completely opens the bridge between Next.js and Flask
+    # =======================================================
     CORS(
         app,
-        resources={r"/api/*": {"origins": ["http://localhost:3000"]}},
-        supports_credentials=True
+        supports_credentials=True,
+        origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization"]
     )
 
     # Register Blueprints
@@ -132,7 +137,6 @@ def create_app():
             from app.db import get_cursor
 
             with get_cursor() as cur:
-                # 🔥 ADD phone AND referral_code TO THIS QUERY:
                 cur.execute(
                     "SELECT id, full_name, email, phone, referral_code, role_id FROM users WHERE id = %s",
                     (user_id,)

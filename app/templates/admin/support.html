@@ -1,0 +1,73 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Support Desk{% endblock %}
+{% block header_title %}Support Desk{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-0">💬 Support Tickets</h4>
+        <p class="text-muted mb-0 mt-1">Reply to user issues directly from this desk.</p>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 rounded-4 overflow-hidden">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="bg-light text-muted small text-uppercase">
+                    <tr>
+                        <th class="ps-4 py-3">Ticket ID</th>
+                        <th class="py-3">User</th>
+                        <th class="py-3">Subject / Message</th>
+                        <th class="py-3">Status</th>
+                        <th class="pe-4 py-3">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in tickets %}
+                    <tr>
+                        <td class="fw-bold text-muted ps-4">#TKT-{{ t.id }}</td>
+                        <td>
+                            <strong class="text-dark">{{ t.full_name }}</strong><br>
+                            <small class="text-muted">{{ t.email }}</small>
+                        </td>
+                        <td style="max-width: 300px;">
+                            <strong class="text-dark d-block text-truncate">{{ t.subject }}</strong>
+                            <span class="text-muted small d-block text-truncate">{{ t.message }}</span>
+                        </td>
+                        <td>
+                            {% if t.status == 'Open' %}
+                                <span class="badge bg-warning text-dark px-3 py-1 rounded-pill">Open</span>
+                            {% else %}
+                                <span class="badge bg-success px-3 py-1 rounded-pill">Resolved</span>
+                            {% endif %}
+                        </td>
+                        <td class="pe-4">
+                            {% if t.status == 'Open' %}
+                            <form action="/admin/support/resolve/{{ t.id }}" method="POST" class="d-flex">
+                                <input type="text" name="admin_response" class="form-control form-control-sm me-2" placeholder="Write reply..." required>
+                                <button type="submit" class="btn btn-sm btn-primary fw-bold">Resolve</button>
+                            </form>
+                            {% else %}
+                            <div class="bg-light p-2 rounded-3 border border-success-subtle">
+                                <small class="text-success d-block"><i class="fas fa-reply me-1"></i> <strong>Replied:</strong></small>
+                                <small class="text-dark">{{ t.admin_response }}</small>
+                            </div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center py-5">
+                            <i class="fas fa-check-circle text-success fs-1 opacity-50 mb-3 d-block"></i>
+                            <h5 class="text-muted mb-0">Inbox Zero! No open support tickets.</h5>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

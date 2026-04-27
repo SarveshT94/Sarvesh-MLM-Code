@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 # =========================================================
 # CREATE WITHDRAW REQUEST
 # =========================================================
-def create_withdraw_request(user_id, amount):
+def create_withdraw_request(user_id, amount, payout_method="bank", payout_details=""):
     try:
         amount = Decimal(str(amount))
 
@@ -26,9 +26,11 @@ def create_withdraw_request(user_id, amount):
                 (user_id,)
             )
 
-            balance = get_wallet_balance(cur, user_id)
+            # 🔥 FIXED: Extract the actual number from the dictionary we created in the last step
+            balance_data = get_wallet_balance(cur, user_id)
+            current_balance = Decimal(str(balance_data.get("balance", 0)))
 
-            if balance < amount:
+            if current_balance < amount:
                 return {"success": False, "message": "Insufficient balance"}
 
             # Prevent multiple pending requests
@@ -41,23 +43,27 @@ def create_withdraw_request(user_id, amount):
             if cur.fetchone():
                 return {"success": False, "message": "Pending request exists"}
 
-            # Create request
+            # Insert request with UPI/Bank details
             cur.execute("""
-                INSERT INTO withdraw_requests (user_id, amount)
-                VALUES (%s,%s)
+                INSERT INTO withdraw_requests (user_id, amount, payout_method, payout_details)
+                VALUES (%s, %s, %s, %s)
                 RETURNING id
-            """, (user_id, amount))
+            """, (user_id, amount, payout_method, payout_details))
 
             request_id = cur.fetchone()["id"]
 
-            # ✅ Audit
+            # ✅ Audit (Added payout method to tracking)
             log_action(
                 action="withdraw_request_created",
                 user_id=user_id,
-                metadata={"amount": str(amount), "request_id": request_id}
+                metadata={
+                    "amount": str(amount), 
+                    "request_id": request_id,
+                    "payout_method": payout_method
+                }
             )
 
-        return {"success": True, "request_id": request_id}
+        return {"success": True, "request_id": request_id, "message": "Withdrawal requested successfully!"}
 
     except Exception as e:
         logger.error(f"Withdraw request failed | {str(e)}")

@@ -124,6 +124,11 @@ def authenticate_user(identifier, raw_password):
         if not user:
             return {"status": "error", "message": "Invalid credentials."}
 
+        # 🔥 FIXED: Check if the Admin has deactivated this account
+        if not user.get('is_active', True):
+            logger.warning(f"Blocked login attempt for deactivated user: {identifier}")
+            return {"status": "error", "message": "Your account has been deactivated. Please contact support."}
+
         # Strip invisible PostgreSQL padding spaces
         db_hash = user.get('password_hash', '')
         if isinstance(db_hash, str):
@@ -142,7 +147,6 @@ def authenticate_user(identifier, raw_password):
     except Exception as e:
         logger.error(f"Authentication error: {str(e)}")
         return {"status": "error", "message": "Internal server error"}
-
 
         
 # -----------------------------------

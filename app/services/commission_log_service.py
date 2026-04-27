@@ -1,6 +1,9 @@
-from app.db import get_cursor
+import logging
 from decimal import Decimal
+from app.db import get_cursor
 from app.services.wallet_service import credit_wallet
+
+logger = logging.getLogger(__name__)
 
 # =================================================================
 # HELPER: CALCULATE TOTAL NETWORK SALES VOLUME
@@ -50,7 +53,7 @@ def distribute_package_commissions(cur, purchaser_id, package_price):
     target_tiers = cur.fetchall()
 
     # ==========================================
-    # STEP 1: Process 5% Self-Cashback
+    # STEP 1: Process Self-Cashback
     # ==========================================
     cashback_amount = (price * cashback_pct) / Decimal('100')
     if cashback_amount > 0:
@@ -58,7 +61,7 @@ def distribute_package_commissions(cur, purchaser_id, package_price):
             cur, 
             purchaser_id, 
             cashback_amount, 
-            reference="self_cashback", 
+            reference=f"self_cashback_{purchaser_id}", 
             description=f"{cashback_pct}% Cashback on package purchase"
         )
         _log_commission(cur, purchaser_id, purchaser_id, 0, cashback_amount, 'cashback')
@@ -66,7 +69,6 @@ def distribute_package_commissions(cur, purchaser_id, package_price):
     # ==========================================
     # STEP 2: Trace the ENTIRE Upline Chain
     # ==========================================
-    # We remove the 10-level limit here because Team Target Bonuses apply to infinite depth
     cur.execute("""
         WITH RECURSIVE upline AS (
             SELECT id, sponsor_id, 1 AS distance FROM users WHERE id = (SELECT sponsor_id FROM users WHERE id = %s)
@@ -88,9 +90,6 @@ def distribute_package_commissions(cur, purchaser_id, package_price):
         if not upline_id:
             continue 
 
-        # --------------------------------------------------
-        # A. Direct & Level Commissions (Max 10 Levels)
-        # --------------------------------------------------
         comm_amount = Decimal('0.00')
         comm_type = ''
         desc = ''
@@ -108,22 +107,19 @@ def distribute_package_commissions(cur, purchaser_id, package_price):
                 desc = f"{pct}% Level {level} Commission from User #{purchaser_id}"
 
         if comm_amount > 0:
-            credit_wallet(cur, upline_id, comm_amount, reference=comm_type, description=desc)
+            credit_wallet(cur, upline_id, comm_amount, reference=f"{comm_type}_{purchaser_id}_{level}", description=desc)
             _log_commission(cur, upline_id, purchaser_id, level, comm_amount, comm_type)
 
-        # --------------------------------------------------
-        # B. Team Target Bonus (Infinite Depth Performance)
-        # --------------------------------------------------
+        # Team Target Bonus (Infinite Depth)
         team_volume = _get_team_volume(cur, upline_id)
-        
         target_bonus_pct = Decimal('0.00')
+        
         for tier in target_tiers:
             min_vol = Decimal(str(tier['min_volume']))
             max_vol = Decimal(str(tier['max_volume']))
-            
             if min_vol <= team_volume <= max_vol:
                 target_bonus_pct = Decimal(str(tier['bonus_percentage']))
-                break  # Stop checking once we find their correct tier
+                break  
 
         if target_bonus_pct > 0:
             target_bonus_amount = (price * target_bonus_pct) / Decimal('100')
@@ -131,8 +127,8 @@ def distribute_package_commissions(cur, purchaser_id, package_price):
                 cur, 
                 upline_id, 
                 target_bonus_amount, 
-                reference="team_target_bonus", 
-                description=f"{target_bonus_pct}% Team Target Bonus (Total Team Vol: ₹{team_volume})"
+                reference=f"team_target_bonus_{purchaser_id}_{level}", 
+                description=f"{target_bonus_pct}% Team Target Bonus (Vol: ₹{team_volume})"
             )
             _log_commission(cur, upline_id, purchaser_id, level, target_bonus_amount, 'team_target_bonus')
 
@@ -149,22 +145,86 @@ def _log_commission(cur, earner_id, from_user_id, level, amount, comm_type):
 
 
 # =================================================================
-# ADMIN DASHBOARD VIEWS
+# 📊 ADMIN DASHBOARD VIEWS (🔥 UPGRADED WITH LEGACY DATA FALLBACKS)
 # =================================================================
 def get_commission_logs(limit=100, offset=0):
-    """Fetch commission logs for admin panel reports"""
-    with get_cursor() as cur:
-        cur.execute("""
-            SELECT
-                c.id, c.earner_id, c.from_user_id, c.level, c.amount, 
-                c.commission_type, c.created_at,
-                u.full_name AS earner_name,
-                f.full_name AS from_user_name
-            FROM commissions c
-            JOIN users u ON u.id = c.earner_id
-            LEFT JOIN users f ON f.id = c.from_user_id  
-            ORDER BY c.created_at DESC
-            LIMIT %s OFFSET %s
-        """, (limit, offset))
+    """
+    Fetch commission logs mapped specifically for the interactive Admin Receipt Modal.
+    Uses COALESCE to handle old "legacy" database records that are missing data.
+    """
+    try:
+        with get_cursor() as cur:
+            cur.execute("""
+                SELECT
+                    c.id, 
+                    c.created_at, 
+                    c.amount, 
+                    c.commission_type AS type,
+                    c.commission_type AS description,
+                    u.id AS user_id, 
+                    u.full_name, 
+                    COALESCE(NULLIF(u.phone, ''), 'Not Provided') AS earner_phone, 
+                    COALESCE(NULLIF(s.full_name, ''), 'Root User') AS referrer_name,
+                    f.id AS trigger_user_id, 
+                    COALESCE(NULLIF(f.full_name, ''), 'System') AS trigger_user_name,
+                    COALESCE(NULLIF(f.phone, ''), 'Not Provided') AS trigger_phone,
+                    COALESCE(NULLIF(sp.name, ''), 'Legacy Package') AS plan_name
+                FROM commissions c
+                JOIN users u ON u.id = c.earner_id
+                LEFT JOIN users s ON u.sponsor_id = s.id  
+                LEFT JOIN users f ON f.id = c.from_user_id  
+                
+                -- Isolate the Trigger User's latest package
+                LEFT JOIN (
+                    SELECT DISTINCT ON (user_id) user_id, package_id 
+                    FROM user_packages 
+                    ORDER BY user_id, created_at DESC
+                ) latest_pkg ON latest_pkg.user_id = f.id
+                
+                -- Link to subscription_plans
+                LEFT JOIN subscription_plans sp ON sp.id = latest_pkg.package_id
+                
+                ORDER BY c.created_at DESC
+                LIMIT %s OFFSET %s
+            """, (limit, offset))
 
-        return cur.fetchall()
+            return cur.fetchall()
+    except Exception as e:
+        logger.error(f"Error fetching admin commission logs: {str(e)}")
+        return []
+
+# =================================================================
+# 👤 USER FRONTEND VIEWS
+# =================================================================
+def get_user_commission_logs(user_id, limit=50, offset=0):
+    try:
+        with get_cursor() as cur:
+            cur.execute("""
+                SELECT 
+                    c.id, 
+                    c.created_at, 
+                    c.amount, 
+                    c.commission_type AS type,
+                    f.full_name AS trigger_user_name
+                FROM commissions c
+                LEFT JOIN users f ON f.id = c.from_user_id 
+                WHERE c.earner_id = %s
+                ORDER BY c.created_at DESC
+                LIMIT %s OFFSET %s
+            """, (user_id, limit, offset))
+            
+            return cur.fetchall()
+    except Exception as e:
+        logger.error(f"Error fetching user commission logs: {str(e)}")
+        return []
+
+
+# =================================================================
+# ⚠️ BACKWARD COMPATIBILITY WRAPPER
+# (Prevents old code from crashing if it imports the old function name)
+# =================================================================
+def distribute_commission(cur, from_user_id, purchase_amount):
+    return distribute_package_commissions(cur, from_user_id, purchase_amount)
+
+def process_commission(cur, from_user_id, purchase_amount):
+    return distribute_package_commissions(cur, from_user_id, purchase_amount)

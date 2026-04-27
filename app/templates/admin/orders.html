@@ -1,0 +1,125 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Purchase History{% endblock %}
+{% block header_title %}Purchase History (Orders){% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h4 class="fw-bold mb-0">🛒 Purchase History</h4>
+        <p class="text-muted mb-0 mt-1">Track all system-wide package purchases and subscriptions.</p>
+    </div>
+    <button class="btn btn-success fw-bold shadow-sm" onclick="exportOrdersExcel()">
+        <i class="bi bi-file-earmark-excel me-1"></i> Export to Excel
+    </button>
+</div>
+
+<div class="alert alert-primary bg-primary bg-opacity-10 border-0 text-primary py-2 d-flex align-items-center fw-medium rounded-3 shadow-sm mb-4">
+    <i class="fas fa-lightbulb fa-lg me-3"></i> 
+    Pro Tip: Double-click any row below to instantly view that user's complete 360° Network Profile.
+</div>
+
+<div class="card shadow-sm border-0 rounded-4 overflow-hidden bg-white">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle" id="ordersTable">
+                <thead class="bg-light text-muted small text-uppercase">
+                    <tr>
+                        <th class="ps-4 py-3">Order ID & Date</th>
+                        <th class="py-3">Purchased By</th>
+                        <th class="py-3">Package Details</th>
+                        <th class="pe-4 py-3 text-end">Amount Paid</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    <tr class="transition-hover" style="cursor: pointer;" title="Double-click to view 360° Network Profile" ondblclick="window.location.href='/admin/user/network/{{ order['user_id'] }}'">
+                        
+                        <td class="ps-4">
+                            <div class="fw-bold text-dark order-id">#ORD-{{ order['order_id'] }}</div>
+                            <div class="text-muted small order-date">
+                                <i class="bi bi-clock me-1"></i> 
+                                {{ order['created_at'].strftime('%Y-%m-%d %H:%M') if order['created_at'] else 'N/A' }}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="fw-bold text-dark user-name">{{ order['full_name'] | default('Unknown', true) }}</div>
+                            <div class="text-muted small">ID: <span class="user-id">#{{ order['user_id'] }}</span> | <a href="mailto:{{ order['email'] }}" class="text-decoration-none user-email" onclick="event.stopPropagation();">{{ order['email'] }}</a></div>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                {% if order['image_url'] %}
+                                <img src="{{ order['image_url'] }}" alt="Plan" class="rounded-3 me-3 border" style="width: 40px; height: 40px; object-fit: cover;">
+                                {% else %}
+                                <div class="bg-light rounded-3 me-3 d-flex align-items-center justify-content-center border" style="width: 40px; height: 40px;">
+                                    <i class="bi bi-box text-secondary"></i>
+                                </div>
+                                {% endif %}
+                                <div>
+                                    <span class="badge bg-primary bg-opacity-10 text-primary px-2 py-1 rounded-pill mb-1 plan-name">
+                                        {{ order['plan_name'] | default('Legacy Package', true) }}
+                                    </span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="pe-4 text-end">
+                            <span class="fw-black text-success fs-5 amount-val" data-val="{{ order['amount'] }}">₹{{ "%.2f"|format(order['amount'] | default(0)) }}</span>
+                            <div class="text-muted small">Paid/Active</div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center py-5 text-muted">
+                            <i class="bi bi-cart-x fs-1 d-block mb-3 opacity-50"></i>
+                            <h5 class="fw-medium">No purchase history found.</h5>
+                            <p class="small mb-0">When users buy packages, they will appear here.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+    function exportOrdersExcel() {
+        if (typeof XLSX === 'undefined') return alert("Excel library blocked.");
+        const data = [];
+        const rows = document.querySelectorAll("#ordersTable tbody tr.transition-hover");
+
+        // Set up the Excel Headers
+        data.push(["Order ID", "Date", "Purchaser Name", "User ID", "Email", "Package Name", "Amount Paid (INR)"]);
+
+        let hasData = false;
+        rows.forEach(row => {
+            const nameDiv = row.querySelector(".user-name");
+            if (nameDiv) {
+                hasData = true;
+                const orderId = row.querySelector(".order-id").innerText.trim();
+                const date = row.querySelector(".order-date").innerText.replace("clock", "").trim();
+                const name = nameDiv.innerText.trim();
+                const userId = row.querySelector(".user-id").innerText.trim();
+                const email = row.querySelector(".user-email").innerText.trim();
+                const planName = row.querySelector(".plan-name").innerText.trim();
+                const amount = row.querySelector(".amount-val").getAttribute("data-val");
+
+                data.push([orderId, date, name, userId, email, planName, amount]);
+            }
+        });
+
+        if (!hasData) return alert("No records to export.");
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, "Purchase History");
+        XLSX.writeFile(wb, "RK_Trendz_Purchase_History.xlsx");
+    }
+</script>
+
+<style>
+    .transition-hover { transition: background-color 0.2s ease; }
+    .transition-hover:hover { background-color: #f8fafc; }
+</style>
+{% endblock %}

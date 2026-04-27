@@ -1,57 +1,159 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Commission Logs | MLM System</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; color: #334155; overflow-x: hidden; }
-        .sidebar { height: 100vh; width: 260px; position: fixed; top: 0; left: 0; background: #0f172a; color: #f8fafc; padding: 1.5rem 1rem; z-index: 1000; }
-        .sidebar-brand { font-size: 1.25rem; font-weight: 700; margin-bottom: 2.5rem; padding-left: 0.5rem; display: flex; align-items: center; gap: 0.75rem; color: #ffffff; }
-        .sidebar-brand i { color: #3b82f6; font-size: 1.5rem; }
-        .nav-link { color: #94a3b8; font-weight: 500; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.75rem; transition: all 0.2s ease-in-out; text-decoration: none; }
-        .nav-link:hover, .nav-link.active { color: #ffffff; background: #1e293b; }
-        .main-content { margin-left: 260px; padding: 2rem; min-height: 100vh; }
-        .page-header { margin-bottom: 1.5rem; }
-        .page-header h4 { font-weight: 700; color: #0f172a; margin: 0; }
-        .table-card { background: #ffffff; border-radius: 1rem; padding: 1.5rem; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .table thead th { background-color: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; padding: 1rem; }
-        .table tbody td { padding: 1rem; vertical-align: middle; color: #334155; border-bottom: 1px solid #f1f5f9; }
-        .amount-text { font-weight: 700; color: #22c55e; font-size: 1.05rem; }
-    </style>
-</head>
-<body>
-    <nav class="sidebar">
-        <div class="sidebar-brand"><i class="bi bi-hexagon-fill"></i><span>MLM Admin</span></div>
-        <div class="nav flex-column">
-            <a href="/" class="nav-link"><i class="bi bi-grid-1x2"></i> Dashboard</a>
-            <a href="/admin/users" class="nav-link"><i class="bi bi-people"></i> Users</a>
-            <a href="/admin/packages" class="nav-link"><i class="bi bi-box-seam"></i> Manage Plans</a>
-            <a href="/admin/withdraws" class="nav-link"><i class="bi bi-cash-stack"></i> Withdrawals</a>
-            <a href="/admin/kyc" class="nav-link"><i class="bi bi-shield-check"></i> KYC</a>
-            <a href="/admin/reports" class="nav-link active"><i class="bi bi-bar-chart"></i> Reports</a>
+{% extends "admin/base.html" %}
+
+{% block title %}Commission Logs{% endblock %}
+{% block header_title %}Commission Logs{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: #0f172a;">📊 Commission Ledger</h4>
+        <p class="text-muted mb-0">Detailed tracking of all system payouts, level incomes, and network bonuses.</p>
+    </div>
+    <button class="btn btn-success fw-bold shadow-sm" onclick="exportCommissionSheet()">
+        <i class="bi bi-file-earmark-excel me-1"></i> Export to Excel
+    </button>
+</div>
+
+<div class="alert alert-primary bg-primary bg-opacity-10 border-0 text-primary py-2 d-flex align-items-center fw-medium rounded-3 shadow-sm mb-4">
+    <i class="fas fa-lightbulb fa-lg me-3"></i>
+    Pro Tip: Double-click any row below to instantly view that user's complete 360° Network Profile.
+</div>
+
+<div class="card shadow-sm border-0 rounded-4 overflow-hidden bg-white">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle" id="commissionTable">
+                <thead class="bg-light text-muted small text-uppercase">
+                    <tr>
+                        <th class="ps-4 py-3">Txn ID</th>
+                        <th class="py-3">Date & Time</th>
+                        <th class="py-3">Recipient Info</th>
+                        <th class="py-3">Commission Trigger (Source)</th>
+                        <th class="py-3 text-end">Amount Earned</th>
+                        <th class="pe-4 py-3 text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr class="transition-hover" style="cursor: pointer;" title="Double-click to open Profile" ondblclick="window.location.href='/admin/user/network/{{ log.user_id }}'">
+                        
+                        <td class="fw-bold text-muted small ps-4">#TXN-{{ log.id }}</td>
+                        <td class="text-muted small">
+                            <i class="bi bi-clock me-1"></i>
+                            {{ log.created_at.strftime('%Y-%m-%d %H:%M') if log.created_at else 'N/A' }}
+                        </td>
+                        <td>
+                            <div class="fw-bold text-dark user-name">{{ log.full_name | default('Unknown') }}</div>
+                            <div class="text-muted small">ID: #{{ log.user_id }} | <i class="bi bi-telephone-fill ms-1"></i> <span class="user-phone">{{ log.earner_phone | default('N/A') }}</span></div>
+                        </td>
+                        <td>
+                            <span class="badge bg-primary bg-opacity-10 text-primary px-2 py-1 rounded-pill mb-1 comm-type">
+                                {{ log.type | replace('_', ' ') | title | default('Network Bonus') }}
+                            </span>
+                            <div class="text-muted small text-truncate" style="max-width: 250px;">
+                                From: <a href="/admin/user/network/{{ log.trigger_user_id }}" class="text-decoration-none fw-bold text-info" onclick="event.stopPropagation();">{{ log.trigger_user_name | default('System') }}</a>
+                                <br><span class="text-secondary opacity-75">(Plan: {{ log.plan_name | default('System Package') }})</span>
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            <span class="fw-black text-success fs-5 amount-val" data-val="{{ log.amount }}">+₹{{ "%.2f"|format(log.amount | default(0)) }}</span>
+                        </td>
+                        <td class="pe-4 text-center">
+                            <button class="btn btn-sm btn-outline-dark fw-bold rounded-3 px-3" onclick="event.stopPropagation();" data-bs-toggle="modal" data-bs-target="#receiptModal{{ log.id }}">
+                                Receipt
+                            </button>
+                        </td>
+                    </tr>
+
+                    <div class="modal fade" id="receiptModal{{ log.id }}" tabindex="-1" onclick="event.stopPropagation();">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content rounded-4 border-0 shadow-lg">
+                                <div class="modal-header bg-light border-bottom-0 pb-0">
+                                    <h5 class="modal-title fw-bold"><i class="bi bi-receipt text-primary me-2"></i> Commission Receipt</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body pt-3">
+                                    <div class="text-center mb-4">
+                                        <h2 class="fw-black text-success mb-0">+₹{{ "%.2f"|format(log.amount | default(0)) }}</h2>
+                                        <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill mt-1">{{ log.type | replace('_', ' ') | title | default('Commission') }}</span>
+                                        <p class="text-muted small mt-2 mb-0">{{ log.created_at.strftime('%Y-%m-%d %H:%M') if log.created_at else 'N/A' }}</p>
+                                        <p class="text-muted small font-monospace">#TXN-{{ log.id }}</p>
+                                    </div>
+
+                                    <div class="card bg-slate-50 border border-slate-200 rounded-3 mb-3 shadow-none">
+                                        <div class="card-body p-3">
+                                            <h6 class="fw-bold text-dark mb-2 border-bottom pb-2"><i class="bi bi-person-check text-success me-2"></i>Recipient Details</h6>
+                                            <div class="d-flex justify-content-between small mb-1"><span class="text-muted">Name:</span> <span class="fw-bold">{{ log.full_name | default('Unknown') }}</span></div>
+                                            <div class="d-flex justify-content-between small mb-1"><span class="text-muted">User ID:</span> <span class="fw-bold">#{{ log.user_id }}</span></div>
+                                            <div class="d-flex justify-content-between small mb-1"><span class="text-muted">Earner Phone:</span> <span class="fw-bold text-primary">{{ log.earner_phone | default('N/A') }}</span></div>
+                                            <div class="d-flex justify-content-between small mt-2 pt-2 border-top"><span class="text-muted">Referred By (Upline):</span> <span class="fw-bold text-info">{{ log.referrer_name | default('Root') }}</span></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="card bg-slate-50 border border-slate-200 rounded-3 shadow-none">
+                                        <div class="card-body p-3">
+                                            <h6 class="fw-bold text-dark mb-2 border-bottom pb-2"><i class="bi bi-box-arrow-in-right text-primary me-2"></i>Trigger Details (Source)</h6>
+                                            <div class="d-flex justify-content-between small mb-1"><span class="text-muted">Generated By:</span> <span class="fw-bold">{{ log.trigger_user_name | default('System') }}</span></div>
+                                            <div class="d-flex justify-content-between small mb-1"><span class="text-muted">Trigger ID:</span> <span class="fw-bold">#{{ log.trigger_user_id | default('-') }}</span></div>
+                                            <div class="d-flex justify-content-between small mb-1"><span class="text-muted">Source Phone:</span> <span class="fw-bold text-danger">{{ log.trigger_phone | default('N/A') }}</span></div>
+                                            <div class="d-flex justify-content-between small"><span class="text-muted">Purchased Plan:</span> <span class="fw-bold text-success">{{ log.plan_name | default('System Package') }}</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">
+                            <h5 class="fw-medium">No commissions generated yet.</h5>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-    </nav>
-    <main class="main-content">
-        <div class="page-header"><h4>📈 Commission Logs</h4><p class="text-muted mb-0 mt-1">Track system payouts and referral income.</p></div>
-        <div class="table-card">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead><tr><th>Log ID</th><th>Earner</th><th>Source</th><th>Amount</th><th class="text-end">Date</th></tr></thead>
-                    <tbody>
-                        {% for log in logs %}
-                        <tr><td class="text-muted fw-medium">#{{ log.id }}</td><td>{{ log.earner_name }}</td><td>{{ log.from_user_name }}</td><td><div class="amount-text">+₹{{ log.amount }}</div></td><td class="text-end">{{ log.created_at }}</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </main>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+    function exportCommissionSheet() {
+        if (typeof XLSX === 'undefined') return alert("Excel library blocked.");
+        const data = [];
+        const rows = document.querySelectorAll("#commissionTable tbody tr.transition-hover");
+
+        data.push(["Transaction ID", "Date", "Recipient Name", "Recipient Phone", "Commission Type", "Earned Amount (INR)"]);
+
+        let hasData = false;
+        rows.forEach(row => {
+            const nameDiv = row.querySelector(".user-name");
+            if (nameDiv) {
+                hasData = true;
+                const txnId = row.querySelector("td:nth-child(1)").innerText.trim();
+                const date = row.querySelector("td:nth-child(2)").innerText.replace("clock", "").trim();
+                const name = nameDiv.innerText.trim();
+                const phone = row.querySelector(".user-phone").innerText.trim();
+                const type = row.querySelector(".comm-type").innerText.trim();
+                const amount = row.querySelector(".amount-val").getAttribute("data-val");
+
+                data.push([txnId, date, name, phone, type, amount]);
+            }
+        });
+
+        if (!hasData) return alert("No records to export.");
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, "Commissions");
+        XLSX.writeFile(wb, "RK_Trendz_Commission_Logs.xlsx");
+    }
+</script>
+
+<style>
+    .bg-slate-50 { background-color: #f8fafc; }
+    .border-slate-200 { border-color: #e2e8f0; }
+    .transition-hover { transition: background-color 0.2s ease; }
+    .transition-hover:hover { background-color: #f8fafc; }
+</style>
+{% endblock %}

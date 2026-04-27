@@ -23,7 +23,10 @@ class AuthUser(UserMixin):
         self.role_id = user_dict.get('role_id', 2)
         self.full_name = user_dict.get('full_name', '')
         self.email = user_dict.get('email', '')
-
+        
+        # 🔥 FIXED: The session will no longer drop the phone number or referral code!
+        self.phone = user_dict.get('phone', '') 
+        self.referral_code = user_dict.get('referral_code', '')
 
 # -----------------------------------
 # Secure Registration Route
@@ -163,9 +166,23 @@ def reset_password():
 # -----------------------------------
 @auth_bp.route('/me', methods=['GET'])
 def get_me():
-    from flask_login import current_user
+    from flask_login import current_user, logout_user
+    from app.db import get_cursor
     try:
         if current_user.is_authenticated:
+            
+            # 🔥 FIXED: Real-time Database Check
+            # Ensure the user wasn't deactivated by an admin while they were browsing
+            with get_cursor() as cur:
+                cur.execute("SELECT is_active FROM users WHERE id = %s", (current_user.id,))
+                db_user = cur.fetchone()
+                
+                # If user doesn't exist or is deactivated, kill their session immediately
+                if not db_user or not db_user['is_active']:
+                    logout_user()
+                    session.clear()
+                    return jsonify({"status": "error", "message": "Your account has been deactivated."}), 401
+
             return jsonify({
                 "status": "success",
                 "user": {
@@ -173,11 +190,11 @@ def get_me():
                     "full_name": current_user.full_name,
                     "email": current_user.email,
                     "role_id": current_user.role_id,
-                    # We securely grab these from the updated User class
                     "phone": getattr(current_user, 'phone', ''),
                     "referral_code": getattr(current_user, 'referral_code', '')
                 }
             }), 200
+            
         return jsonify({"status": "error", "message": "Not logged in"}), 401
     except Exception as e:
         logger.error(f"Session check error: {str(e)}")

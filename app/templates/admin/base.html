@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Admin Panel{% endblock %} - RK Trendz</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+    
+    <style>
+        body { min-height: 100vh; display: flex; flex-direction: column; background-color: #f8fafc; font-family: 'Inter', sans-serif; }
+        
+        /* 🔥 FIXED SIDEBAR STYLING */
+        .sidebar { width: 260px; background: #0f172a; color: white; min-height: 100vh; position: fixed; padding-top: 20px; z-index: 1000; overflow-y: auto; }
+        .sidebar h4 { text-align: center; color: white; font-weight: bold; margin-bottom: 30px; letter-spacing: 1px; }
+        .sidebar a { color: #94a3b8; text-decoration: none; padding: 12px 24px; display: block; font-weight: 500; transition: 0.2s; border-radius: 0 25px 25px 0; margin-right: 15px; margin-bottom: 5px; font-size: 14.5px; }
+        .sidebar a:hover, .sidebar a.active { color: #fff; background: #1e293b; border-left: 4px solid #10b981; }
+        .sidebar i { margin-right: 12px; width: 20px; text-align: center; }
+        
+        /* 🔥 FIXED MAIN CONTENT OFFSET */
+        .main-content { margin-left: 260px; width: calc(100% - 260px); display: flex; flex-direction: column; min-height: 100vh; }
+        .topbar { background: white; padding: 16px 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; z-index: 900; position: sticky; top: 0; }
+        .content-wrapper { padding: 30px; flex: 1; }
+    </style>
+</head>
+<body>
+    <div class="d-flex">
+        <nav class="sidebar">
+            <h4>RK <span style="color: #10b981;">Trendz</span></h4>
+            
+            <a href="/admin/panel" class="{% if request.path == '/admin/panel' or request.path == '/' %}active{% endif %}"><i class="fas fa-chart-pie"></i> Dashboard Overview</a>
+            <a href="/admin/users" class="{% if request.path == '/admin/users' %}active{% endif %}"><i class="fas fa-users"></i> Manage Users</a>
+            <a href="/admin/orders" class="{% if request.path == '/admin/orders' %}active{% endif %}"><i class="fas fa-shopping-cart"></i> Purchase History</a>
+            
+            <hr style="border-color: #1e293b; margin: 15px 24px;">
+            
+            <a href="/admin/withdraws" class="{% if request.path == '/admin/withdraws' %}active{% endif %}"><i class="fas fa-money-check-alt"></i> Payout Requests</a>
+            <a href="/admin/commission-logs" class="{% if request.path == '/admin/commission-logs' %}active{% endif %}"><i class="fas fa-list-ul"></i> Commission Logs</a>
+            <a href="/admin/reports" class="{% if request.path == '/admin/reports' %}active{% endif %}"><i class="fas fa-file-invoice-dollar"></i> Financial Reports</a>
+            
+            <hr style="border-color: #1e293b; margin: 15px 24px;">
+            
+            <a href="/admin/packages" class="{% if request.path == '/admin/packages' %}active{% endif %}"><i class="fas fa-box-open"></i> Manage Plans & Images</a>
+            <a href="/admin/kyc" class="{% if request.path == '/admin/kyc' %}active{% endif %}"><i class="fas fa-id-card"></i> KYC Approvals</a>
+            <a href="/admin/support" class="{% if request.path == '/admin/support' %}active{% endif %}"><i class="fas fa-life-ring"></i> Support Tickets</a>
+            <a href="/admin/risk-monitor" class="{% if request.path == '/admin/risk-monitor' %}active{% endif %} text-danger"><i class="fas fa-shield-alt"></i> Risk Monitor</a>
+            
+            <hr style="border-color: #1e293b; margin: 15px 24px;">
+            
+            <a href="/admin/settings" class="{% if request.path == '/admin/settings' %}active{% endif %}"><i class="fas fa-cog"></i> Company Settings</a>
+        </nav>
+
+        <div class="main-content">
+            <div class="topbar">
+                <h5 class="mb-0 text-dark fw-bold">{% block header_title %}Admin Control Panel{% endblock %}</h5>
+                <div>
+                    <a href="/admin/logout" class="btn btn-outline-danger btn-sm fw-bold shadow-sm"><i class="fas fa-sign-out-alt"></i> Secure Logout</a>
+                </div>
+            </div>
+
+            <div class="container-fluid mt-3 px-4">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ 'success' if category == 'success' else 'danger' if category == 'error' or category == 'danger' else 'warning' }} alert-dismissible fade show shadow-sm border-0" role="alert">
+                                <strong>{{ 'Success!' if category == 'success' else 'Attention!' }}</strong> {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+            </div>
+
+            <div class="content-wrapper">
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

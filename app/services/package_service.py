@@ -6,10 +6,35 @@ from app.services.commission_log_service import distribute_package_commissions
 # 1. SUBSCRIPTION PLANS MANAGEMENT
 # ==========================================
 def get_all_plans():
-    """Fetches all plans for the Admin UI"""
-    with get_cursor() as cur:
-        cur.execute("SELECT * FROM subscription_plans ORDER BY price ASC")
-        return cur.fetchall()
+    """Fetches all plans and their associated product images."""
+    try:
+        with get_cursor() as cur:
+            cur.execute("SELECT * FROM subscription_plans ORDER BY price ASC")
+            plans = cur.fetchall()
+
+            # Fetch the dynamic images for each plan
+            for plan in plans:
+                cur.execute("SELECT image_path FROM plan_images WHERE plan_id = %s", (plan['id'],))
+                images = cur.fetchall()
+                # Attach an array of image paths to the plan object
+                plan['images'] = [img['image_path'] for img in images]
+                
+            return plans
+    except Exception as e:
+        print(f"Error fetching plans: {str(e)}")
+        return []
+
+def add_plan_image(plan_id, image_path):
+    """Saves a new uploaded image path to the database."""
+    try:
+        with get_cursor() as cur:
+            cur.execute(
+                "INSERT INTO plan_images (plan_id, image_path) VALUES (%s, %s)", 
+                (plan_id, image_path)
+            )
+    except Exception as e:
+        print(f"Error saving image path: {str(e)}")
+
 
 def get_plan_by_id(plan_id, cur=None):
     """

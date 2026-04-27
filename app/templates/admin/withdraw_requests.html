@@ -1,179 +1,130 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Withdraw Requests | MLM System</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; color: #334155; overflow-x: hidden; }
-        .sidebar { height: 100vh; width: 260px; position: fixed; top: 0; left: 0; background: #0f172a; color: #f8fafc; padding: 1.5rem 1rem; z-index: 1000; }
-        .sidebar-brand { font-size: 1.25rem; font-weight: 700; margin-bottom: 2.5rem; padding-left: 0.5rem; display: flex; align-items: center; gap: 0.75rem; color: #ffffff; }
-        .sidebar-brand i { color: #3b82f6; font-size: 1.5rem; }
-        .nav-link { color: #94a3b8; font-weight: 500; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.75rem; transition: all 0.2s ease-in-out; text-decoration: none; }
-        .nav-link:hover, .nav-link.active { color: #ffffff; background: #1e293b; }
-        .main-content { margin-left: 260px; padding: 2rem; min-height: 100vh; }
-        .page-header { margin-bottom: 1.5rem; }
-        .page-header h4 { font-weight: 700; color: #0f172a; margin: 0; }
-        .table-card { background: #ffffff; border-radius: 1rem; padding: 1.5rem; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .table { margin-bottom: 0; }
-        .table thead th { background-color: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; padding: 1rem; }
-        .table tbody td { padding: 1rem; vertical-align: middle; color: #334155; border-bottom: 1px solid #f1f5f9; }
-        .user-name { font-weight: 600; color: #0f172a; }
-        .amount-text { font-weight: 700; color: #0f172a; font-size: 1.1rem; }
-        .net-amount { font-weight: 700; color: #16a34a; font-size: 1.2rem; }
-        .deduction-text { font-size: 0.8rem; color: #ef4444; }
-        .status-badge { padding: 0.4em 0.8em; border-radius: 2rem; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
-        
-        /* ✅ NEW: Colors for different statuses */
-        .badge-pending { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
-        .badge-approved { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-        .badge-rejected { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-        
-        .btn-action { font-size: 0.85rem; padding: 0.4rem 0.75rem; border-radius: 0.4rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.3rem; }
-    </style>
-</head>
-<body>
-    <nav class="sidebar">
-        <div class="sidebar-brand"><i class="bi bi-hexagon-fill"></i><span>MLM Admin</span></div>
-        <div class="nav flex-column">
-            <a href="/" class="nav-link"><i class="bi bi-grid-1x2"></i> Dashboard</a>
-            <a href="/admin/users" class="nav-link"><i class="bi bi-people"></i> Users</a>
-            <a href="/admin/packages" class="nav-link"><i class="bi bi-box-seam"></i> Manage Plans</a>
-            <a href="/admin/withdraws" class="nav-link active"><i class="bi bi-cash-stack"></i> Withdrawals</a>
-            <a href="/admin/kyc" class="nav-link"><i class="bi bi-shield-check"></i> KYC</a>
-            <a href="/admin/reports" class="nav-link"><i class="bi bi-bar-chart"></i> Reports</a>
-        </div>
-    </nav>
-    <main class="main-content">
-        
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show shadow-sm" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+{% extends "admin/base.html" %}
 
-        <div class="page-header d-flex justify-content-between align-items-center">
-            <div>
-                <h4>💸 Payout Requests</h4>
-                <p class="text-muted mb-0 mt-1">Review payouts and export bank transfer sheets.</p>
-            </div>
-            <button class="btn btn-success shadow-sm fw-medium" onclick="exportBankSheet()">
-                <i class="bi bi-file-earmark-excel me-2"></i> Bulk Bank Export
-            </button>
-      </div>
-        <div class="table-card">
-            <div class="table-responsive">
-                <table class="table table-hover" id="payoutTable">
-                    <thead>
-                        <tr>
-                            <th>Req ID</th>
-                            <th>User Details</th>
-                            <th>Requested At</th>
-                            <th>Gross Amount</th>
-                            <th>Deductions</th>
-                            <th>Net Payable</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <p class="text-muted mb-3 fw-bold">Total Requests: {{ requests | length }}</p>
-                        {% for req in requests %}
-                        <tr>
-                            <td class="fw-semibold text-muted">#{{ req.id }}</td>
-                            <td>
-                                <div class="user-name">{{ req.full_name }}</div>
-                                <div class="text-muted small"><i class="bi bi-person-badge me-1"></i> ID: {{ req.user_id }}</div>
-                                <div class="text-muted small phone-data"><i class="bi bi-telephone me-1"></i> {{ req.phone }}</div>
-                            </td>
-                            <td>
-                                <div class="text-muted small"><i class="bi bi-clock me-1"></i> {{ req.requested_at.strftime('%Y-%m-%d %H:%M') if req.requested_at else 'N/A' }}</div>
-                                
-                                {% if req.status == 'pending' %}
-                                    <span class="status-badge badge-pending mt-1 d-inline-block">Pending</span>
-                                {% elif req.status == 'approved' %}
-                                    <span class="status-badge badge-approved mt-1 d-inline-block">Approved</span>
-                                {% elif req.status == 'rejected' %}
-                                    <span class="status-badge badge-rejected mt-1 d-inline-block">Rejected</span>
-                                {% else %}
-                                    <span class="status-badge mt-1 d-inline-block">{{ req.status }}</span>
-                                {% endif %}
-                            </td>
-                            <td><div class="amount-text">₹{{ "%.2f"|format(req.amount) }}</div></td>
-                            <td>
-                                <div class="deduction-text">- ₹{{ "%.2f"|format(req.tds_amount) }} (TDS)</div>
-                                <div class="deduction-text">- ₹{{ "%.2f"|format(req.admin_fee) }} (Admin)</div>
-                            </td>
-                            <td><div class="net-amount" data-net="{{ req.net_payable }}">₹{{ "%.2f"|format(req.net_payable) }}</div></td>
-                            <td class="text-end">
-                                {% if req.status == 'pending' %}
-                                    <a href="/admin/withdraw/approve/{{ req.id }}" class="btn btn-success btn-action text-white mb-1"><i class="bi bi-check-circle"></i> Approve</a>
-                                    <br>
-                                    <form action="/admin/withdraw/reject/{{ req.id }}" method="POST" class="d-inline">
-                                        <input type="hidden" name="reason" value="Rejected by Admin during review">
-                                        <button type="submit" class="btn btn-outline-danger btn-action"><i class="bi bi-x-circle"></i> Reject</button>
-                                    </form>
-                                {% else %}
-                                    <span class="text-muted small fst-italic">Processed</span>
-                                {% endif %}
-                            </td>
-                        </tr>
+{% block title %}Payout Requests{% endblock %}
+{% block header_title %}Payout Requests{% endblock %}
+
+{% block content %}
+<style>
+    .table-card { background: #ffffff; border-radius: 1rem; padding: 1.5rem; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .table thead th { background-color: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; padding: 1rem; }
+    .table tbody td { padding: 1rem; vertical-align: middle; color: #334155; border-bottom: 1px solid #f1f5f9; }
+    .amount-text { font-weight: 700; color: #0f172a; font-size: 1.1rem; }
+    .net-amount { font-weight: 700; color: #16a34a; font-size: 1.2rem; }
+    .deduction-text { font-size: 0.8rem; color: #ef4444; }
+    .status-badge { padding: 0.4em 0.8em; border-radius: 2rem; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .badge-pending { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .badge-approved { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .badge-rejected { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .btn-action { font-size: 0.85rem; padding: 0.4rem 0.75rem; border-radius: 0.4rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.3rem; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-0">💸 Payout Requests</h4>
+        <p class="text-muted mb-0 mt-1">Review payouts and export bank transfer sheets.</p>
+    </div>
+    <button class="btn btn-success shadow-sm fw-medium" onclick="exportBankSheet()">
+        <i class="bi bi-file-earmark-excel me-2"></i> Bulk Bank Export
+    </button>
+</div>
+
+<div class="table-card">
+    <div class="table-responsive">
+        <table class="table table-hover" id="payoutTable">
+            <thead>
+                <tr>
+                    <th>Req ID</th>
+                    <th>User Details</th>
+                    <th>Requested At</th>
+                    <th>Gross Amount</th>
+                    <th>Deductions</th>
+                    <th>Net Payable</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <p class="text-muted mb-3 fw-bold">Total Requests: {{ requests | length }}</p>
+                {% for req in requests %}
+                <tr>
+                    <td class="fw-semibold text-muted">#{{ req.id }}</td>
+                    <td>
+                        <div class="fw-bold text-dark user-name">{{ req.full_name }}</div>
+                        <div class="text-muted small"><i class="bi bi-person-badge me-1"></i> ID: {{ req.user_id }}</div>
+                        <div class="text-muted small phone-data"><i class="bi bi-telephone me-1"></i> {{ req.phone }}</div>
+                    </td>
+                    <td>
+                        <div class="text-muted small"><i class="bi bi-clock me-1"></i> {{ req.requested_at.strftime('%Y-%m-%d %H:%M') if req.requested_at else 'N/A' }}</div>
+                        {% if req.status == 'pending' %}
+                            <span class="status-badge badge-pending mt-1 d-inline-block">Pending</span>
+                        {% elif req.status == 'approved' %}
+                            <span class="status-badge badge-approved mt-1 d-inline-block">Approved</span>
+                        {% elif req.status == 'rejected' %}
+                            <span class="status-badge badge-rejected mt-1 d-inline-block">Rejected</span>
                         {% else %}
-                        <tr>
-                            <td colspan="7" class="text-center py-5 text-muted">
-                                <i class="bi bi-inbox fs-1 d-block mb-3"></i>
-                                No payout requests found.
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </main>
+                            <span class="status-badge mt-1 d-inline-block">{{ req.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td><div class="amount-text">₹{{ "%.2f"|format(req.amount) }}</div></td>
+                    <td>
+                        <div class="deduction-text">- ₹{{ "%.2f"|format(req.tds_amount) }} (TDS)</div>
+                        <div class="deduction-text">- ₹{{ "%.2f"|format(req.admin_fee) }} (Admin)</div>
+                    </td>
+                    <td><div class="net-amount" data-net="{{ req.net_payable }}">₹{{ "%.2f"|format(req.net_payable) }}</div></td>
+                    <td class="text-end">
+                        {% if req.status == 'pending' %}
+                            <a href="/admin/withdraw/approve/{{ req.id }}" class="btn btn-success btn-action text-white mb-1"><i class="bi bi-check-circle"></i> Approve</a>
+                            <br>
+                            <form action="/admin/withdraw/reject/{{ req.id }}" method="POST" class="d-inline">
+                                <input type="hidden" name="reason" value="Rejected by Admin during review">
+                                <button type="submit" class="btn btn-outline-danger btn-action"><i class="bi bi-x-circle"></i> Reject</button>
+                            </form>
+                        {% else %}
+                            <span class="text-muted small fst-italic">Processed</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-center py-5 text-muted">
+                        <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                        No payout requests found.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script>
-        function exportBankSheet() {
-            const data = [];
-            const rows = document.querySelectorAll("#payoutTable tbody tr");
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+    function exportBankSheet() {
+        const data = [];
+        const rows = document.querySelectorAll("#payoutTable tbody tr");
 
-            data.push(["Beneficiary Name", "Phone Number", "Net Payable Amount (INR)", "Remarks"]);
+        data.push(["Beneficiary Name", "Phone Number", "Net Payable Amount (INR)", "Remarks"]);
 
-            let hasData = false;
-            rows.forEach(row => {
-                const nameDiv = row.querySelector(".user-name");
-                if (nameDiv) {
-                    // Only export if it is marked as approved or pending (optional logic adjustment here)
-                    hasData = true;
-                    const name = nameDiv.innerText.trim();
-                    const phone = row.querySelector(".phone-data").innerText.replace(/[^0-9]/g, '');
-                    const netAmt = row.querySelector(".net-amount").getAttribute("data-net");
-
-                    data.push([name, phone, netAmt, "MLM Payout"]);
-                }
-            });
-
-            if (!hasData) {
-                alert("No records to export.");
-                return;
+        let hasData = false;
+        rows.forEach(row => {
+            const nameDiv = row.querySelector(".user-name");
+            if (nameDiv) {
+                hasData = true;
+                const name = nameDiv.innerText.trim();
+                const phone = row.querySelector(".phone-data").innerText.replace(/[^0-9]/g, '');
+                const netAmt = row.querySelector(".net-amount").getAttribute("data-net");
+                data.push([name, phone, netAmt, "MLM Payout"]);
             }
+        });
 
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(data);
-            XLSX.utils.book_append_sheet(wb, ws, "Bank Export");
-            XLSX.writeFile(wb, "Payouts_Bank_Export.xlsx");
+        if (!hasData) {
+            alert("No records to export.");
+            return;
         }
-    </script>
-</body>
-</html>
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, "Bank Export");
+        XLSX.writeFile(wb, "Payouts_Bank_Export.xlsx");
+    }
+</script>
+{% endblock %}
