@@ -1,102 +1,109 @@
 {% extends "admin/base.html" %}
 
-{% block title %}Financial Reports{% endblock %}
-{% block header_title %}Financial Reports{% endblock %}
-
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="mb-4 d-flex justify-content-between align-items-center">
     <div>
-        <h4 class="fw-bold mb-1" style="color: #0f172a;">📈 Financial Overview</h4>
-        <p class="text-muted mb-0">System-wide revenue, profit, and liability metrics.</p>
+        <h4 class="fw-bold text-dark mb-1"><i class="fas fa-microscope me-2 text-primary"></i>Financial Audit Chain</h4>
+        <p class="text-muted small">Transactional trails for Revenue, Profits, Tax, and Wallet Balances.</p>
     </div>
-    <button class="btn btn-outline-secondary fw-bold bg-white shadow-sm" onclick="window.print()">
-        <i class="bi bi-printer me-1"></i> Print Report
-    </button>
 </div>
 
 <div class="row g-4 mb-4">
-    <div class="col-md-4">
-        <div class="card shadow-sm border-0 h-100 rounded-4 bg-white border-bottom border-primary border-4">
-            <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <p class="text-muted fw-bold text-uppercase small mb-2 tracking-wider">Total Revenue</p>
-                        <h3 class="fw-black text-dark mb-0">₹{{ "%.2f"|format(report.total_revenue | default(0)) }}</h3>
-                    </div>
-                    <div class="bg-primary bg-opacity-10 p-3 rounded-circle">
-                        <i class="fas fa-chart-line fa-lg text-primary"></i>
+    <div class="col-md-3">
+        <a href="/admin/orders" class="text-decoration-none">
+            <div class="card shadow-sm border-0 rounded-4 bg-white border-bottom border-primary border-4 transition-hover">
+                <div class="card-body p-4 text-center">
+                    <p class="text-muted fw-bold small mb-2">TOTAL REVENUE</p>
+                    <h2 class="fw-bold text-dark">₹{{ "%.2f"|format(report.total_revenue) }}</h2>
+                    <div class="badge bg-primary bg-opacity-10 text-primary p-2 mt-2">
+                        <i class="fas fa-history me-1"></i> Product History
                     </div>
                 </div>
             </div>
-        </div>
+        </a>
     </div>
 
-    <div class="col-md-4">
-        <div class="card shadow-sm border-0 h-100 rounded-4 bg-white border-bottom border-success border-4">
-            <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <p class="text-muted fw-bold text-uppercase small mb-2 tracking-wider">Admin Profit (Fees)</p>
-                        <h3 class="fw-black text-success mb-0">₹{{ "%.2f"|format(report.total_admin_fees | default(0)) }}</h3>
-                    </div>
-                    <div class="bg-success bg-opacity-10 p-3 rounded-circle">
-                        <i class="fas fa-piggy-bank fa-lg text-success"></i>
+    <div class="col-md-3">
+        <a href="/admin/commission-logs" class="text-decoration-none">
+            <div class="card shadow-sm border-0 rounded-4 bg-white border-bottom border-success border-4 transition-hover">
+                <div class="card-body p-4 text-center">
+                    <p class="text-muted fw-bold small mb-2">GROSS PROFIT</p>
+                    <h2 class="fw-bold text-success">₹{{ "%.2f"|format(report.gross_profit) }}</h2>
+                    <div class="badge bg-success bg-opacity-10 text-success p-2 mt-2">
+                        <i class="fas fa-search-dollar me-1"></i> Profit Audit
                     </div>
                 </div>
             </div>
-        </div>
+        </a>
     </div>
 
-    <div class="col-md-4">
-        <div class="card shadow-sm border-0 h-100 rounded-4 bg-white border-bottom border-info border-4">
-            <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <p class="text-muted fw-bold text-uppercase small mb-2 tracking-wider">TDS Collected (Tax)</p>
-                        <h3 class="fw-black text-info mb-0">₹{{ "%.2f"|format(report.total_tds | default(0)) }}</h3>
-                    </div>
-                    <div class="bg-info bg-opacity-10 p-3 rounded-circle">
-                        <i class="fas fa-file-invoice-dollar fa-lg text-info"></i>
+    <div class="col-md-3">
+        <a href="/admin/withdraws" class="text-decoration-none">
+            <div class="card shadow-sm border-0 rounded-4 bg-white border-bottom border-warning border-4 transition-hover">
+                <div class="card-body p-4 text-center">
+                    <p class="text-muted fw-bold small mb-2">ADMIN FEES (5%)</p>
+                    <h2 class="fw-bold text-warning">₹{{ "%.2f"|format(report.admin_fees) }}</h2>
+                    <div class="badge bg-warning bg-opacity-10 text-warning p-2 mt-2">
+                        <i class="fas fa-coins me-1"></i> Fee History
                     </div>
                 </div>
             </div>
-        </div>
+        </a>
+    </div>
+
+    <div class="col-md-3">
+        <a href="/admin/withdraws" class="text-decoration-none">
+            <div class="card shadow-sm border-0 rounded-4 bg-dark text-white transition-hover">
+                <div class="card-body p-4 text-center">
+                    <p class="text-light opacity-75 fw-bold small mb-2">NET PROFIT</p>
+                    <h2 class="fw-bold text-white">₹{{ "%.2f"|format(report.net_profit) }}</h2>
+                    <div class="badge bg-white bg-opacity-10 text-white p-2 mt-2">
+                        <i class="fas fa-chart-line me-1"></i> Net Audit
+                    </div>
+                </div>
+            </div>
+        </a>
     </div>
 </div>
 
 <div class="row g-4">
     <div class="col-md-6">
-        <div class="card shadow-sm border-0 rounded-4 bg-white h-100">
-            <div class="card-body p-4 d-flex align-items-center">
-                <div class="bg-warning bg-opacity-10 p-3 rounded-3 me-4">
-                    <i class="fas fa-hand-holding-usd fa-2x text-warning"></i>
-                </div>
-                <div>
-                    <p class="text-muted fw-bold text-uppercase small mb-1">Total Payouts Distributed</p>
-                    <h4 class="fw-black text-dark mb-0">₹{{ "%.2f"|format(report.total_payouts | default(0)) }}</h4>
+        <a href="/admin/withdraws" class="text-decoration-none">
+            <div class="card shadow-sm border-0 rounded-4 bg-white p-4 transition-hover">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <p class="text-muted fw-bold small mb-1">TDS COLLECTED (2%)</p>
+                        <h3 class="fw-bold text-info">₹{{ "%.2f"|format(report.total_tds) }}</h3>
+                        <p class="text-muted extra-small mb-0 mt-2">Audit withheld tax history.</p>
+                    </div>
+                    <i class="fas fa-landmark fa-3x text-info opacity-25"></i>
                 </div>
             </div>
-        </div>
+        </a>
     </div>
 
     <div class="col-md-6">
-        <div class="card shadow-sm border-0 rounded-4 bg-white h-100">
-            <div class="card-body p-4 d-flex align-items-center">
-                <div class="bg-danger bg-opacity-10 p-3 rounded-3 me-4">
-                    <i class="fas fa-balance-scale fa-2x text-danger"></i>
-                </div>
-                <div>
-                    <p class="text-muted fw-bold text-uppercase small mb-1">Pending Wallet Balances (Liability)</p>
-                    <h4 class="fw-black text-dark mb-0">₹{{ "%.2f"|format(report.total_wallet_liability | default(0)) }}</h4>
+        <a href="/admin/users" class="text-decoration-none">
+            <div class="card shadow-sm border-0 rounded-4 bg-white p-4 transition-hover">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <p class="text-muted fw-bold small mb-1">SYSTEM LIABILITY</p>
+                        <h3 class="fw-bold text-danger">₹{{ "%.2f"|format(report.total_wallet_liability) }}</h3>
+                        <p class="text-muted extra-small mb-0 mt-2">Audit individual user wallet balances.</p>
+                    </div>
+                    <i class="fas fa-wallet fa-3x text-danger opacity-25"></i>
                 </div>
             </div>
-        </div>
+        </a>
     </div>
 </div>
 
 <style>
-    .tracking-wider { letter-spacing: 0.05em; }
-    .transition-hover { transition: transform 0.2s ease, box-shadow 0.2s ease; }
-    .transition-hover:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(0,0,0,0.08) !important; }
+.transition-hover { transition: all 0.3s ease; }
+.transition-hover:hover { 
+    transform: translateY(-8px); 
+    box-shadow: 0 15px 30px rgba(0,0,0,0.1) !important; 
+}
+.extra-small { font-size: 0.75rem; }
 </style>
 {% endblock %}

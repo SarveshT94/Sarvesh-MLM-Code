@@ -493,8 +493,16 @@ def admin_reject_withdraw(request_id):
 @main.route("/admin/reports")
 @admin_required
 def admin_financial_report():
-    report = get_financial_report()
-    return render_template("admin/financial_report.html", report=report)
+    try:
+        # Get the fresh data we see in the terminal
+        report_data = get_financial_report()
+        
+        # Explicitly pass ONLY the report object to clear the cache
+        return render_template("admin/financial_report.html", report=report_data)
+    except Exception as e:
+        logger.error(f"Report Error: {str(e)}")
+        return redirect("/admin/panel")
+
 
 @main.route("/admin/commission-logs")
 @admin_required

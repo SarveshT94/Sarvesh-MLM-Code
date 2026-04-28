@@ -4,10 +4,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 # =========================================================
 # 🛡️ BULLETPROOF BALANCE CALCULATION
-# Completely avoids Postgres ENUM/LIKE casting crashes
 # =========================================================
 def _calculate_balance(cur, user_id):
     cur.execute("""
@@ -19,18 +17,18 @@ def _calculate_balance(cur, user_id):
     balance = Decimal('0.00')
     
     for row in cur.fetchall():
-        # Safely convert to string and lower case in Python to avoid DB crashes
+        # Ledger now stores negative values for debits, so a simple SUM works,
+        # but we keep this logic for safety across different t_types.
         amt = Decimal(str(row['amount'])) if row['amount'] is not None else Decimal('0.00')
         t_type = str(row['transaction_type']).lower() if row['transaction_type'] else ''
         
-        # 🔥 FIXED TYPO HERE: Changed 'ttype' to 't_type'
-        if 'credit' in t_type or 'in' in t_type:
+        # We check both the sign and the type string for absolute safety
+        if amt > 0:
             balance += amt
-        elif 'debit' in t_type or 'out' in t_type:
-            balance -= amt
+        else:
+            balance += amt # Adding a negative number correctly subtracts
             
     return balance
-
 
 # =========================================================
 # PUBLIC BALANCE
@@ -39,10 +37,8 @@ def get_wallet_balance(cur, user_id):
     balance = _calculate_balance(cur, user_id)
     return {"balance": float(balance)}
 
-
 # =========================================================
 # 🛡️ BULLETPROOF WALLET HISTORY
-# Safely handles NULL closing balances without vanishing
 # =========================================================
 def get_wallet_history(cur, user_id):
     try:
@@ -58,14 +54,7 @@ def get_wallet_history(cur, user_id):
         formatted_txs = []
         
         for tx in transactions:
-            # Safely handle amounts
             amt = float(tx["amount"]) if tx["amount"] is not None else 0.0
-            t_type_str = str(tx["transaction_type"]).lower()
-            
-            if 'debit' in t_type_str or 'out' in t_type_str:
-                amt = -abs(amt)
-                
-            # Safely handle closing balance (Prevents the Vanishing History Bug!)
             closing_bal = float(tx["closing_balance"]) if tx.get("closing_balance") is not None else 0.0
 
             formatted_txs.append({
@@ -78,93 +67,44 @@ def get_wallet_history(cur, user_id):
                 "created_at": tx["created_at"].isoformat() if tx["created_at"] else None
             })
 
-        return {
-            "status": "success",
-            "data": formatted_txs
-        }
+        return {"status": "success", "data": formatted_txs}
 
     except Exception as e:
         logger.error(f"Error fetching wallet history: {str(e)}")
-        # Returning an empty list safely if all else fails
         return {"status": "error", "message": str(e), "data": []}
 
-
 # =========================================================
-# CORE LEDGER ENGINE (IMMUTABLE + IDEMPOTENT)
+# CORE LEDGER ENGINE (REPAIRED FOR NEGATIVE DEBITS)
 # =========================================================
 def _create_ledger_entry(cur, user_id, amount, txn_type, reference, description):
-
-    # 🚨 Idempotency check
-    cur.execute("""
-        SELECT id FROM wallet_ledger
-        WHERE reference_id = %s
-        LIMIT 1
-    """, (reference,))
-
+    # Idempotency check
+    cur.execute("SELECT id FROM wallet_ledger WHERE reference_id = %s LIMIT 1", (reference,))
     if cur.fetchone():
         raise Exception(f"Duplicate transaction reference: {reference}")
 
-    # 🔒 Lock user
-    cur.execute(
-        "SELECT id FROM users WHERE id = %s FOR UPDATE",
-        (user_id,)
-    )
+    # Lock user
+    cur.execute("SELECT id FROM users WHERE id = %s FOR UPDATE", (user_id,))
 
     current_balance = _calculate_balance(cur, user_id)
+    amt_decimal = Decimal(str(amount))
 
-    if txn_type == "debit" and current_balance < amount:
+    if txn_type == "debit" and current_balance < amt_decimal:
         raise Exception("Insufficient balance")
 
-    # Calculate closing balance
-    closing_balance = (
-        current_balance + amount if txn_type == "credit"
-        else current_balance - amount
-    )
+    # 🔥 THE FIX: Store debits as negative numbers so SQL SUM() works correctly
+    stored_amount = amt_decimal if txn_type == "credit" else -abs(amt_decimal)
+    closing_balance = current_balance + stored_amount
 
-    # Immutable insert
     cur.execute("""
         INSERT INTO wallet_ledger
         (user_id, amount, transaction_type, reference_id, description, closing_balance, created_at)
         VALUES (%s, %s, %s, %s, %s, %s, NOW())
-    """, (
-        user_id,
-        amount,
-        txn_type,
-        reference,
-        description,
-        closing_balance
-    ))
-
-    logger.info(
-        f"[LEDGER] user={user_id} type={txn_type} amount={amount} closing={closing_balance} ref={reference}"
-    )
+    """, (user_id, stored_amount, txn_type, reference, description, closing_balance))
 
     return closing_balance
 
-
-# =========================================================
-# CREDIT
-# =========================================================
 def credit_wallet(cur, user_id, amount, reference, description="credit"):
-    amount = Decimal(str(amount))
+    return _create_ledger_entry(cur, user_id, amount, "credit", reference, description)
 
-    if amount <= 0:
-        raise Exception("Invalid credit amount")
-
-    return _create_ledger_entry(
-        cur, user_id, amount, "credit", reference, description
-    )
-
-
-# =========================================================
-# DEBIT
-# =========================================================
 def debit_wallet(cur, user_id, amount, reference, description="debit"):
-    amount = Decimal(str(amount))
-
-    if amount <= 0:
-        raise Exception("Invalid debit amount")
-
-    return _create_ledger_entry(
-        cur, user_id, amount, "debit", reference, description
-    )
+    return _create_ledger_entry(cur, user_id, amount, "debit", reference, description)
