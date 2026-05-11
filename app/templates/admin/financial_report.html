@@ -1,97 +1,92 @@
 {% extends "admin/base.html" %}
 
 {% block content %}
-<div class="mb-4 d-flex justify-content-between align-items-center">
-    <div>
-        <h4 class="fw-bold text-dark mb-1"><i class="fas fa-microscope me-2 text-primary"></i>Financial Audit Chain</h4>
-        <p class="text-muted small">Transactional trails for Revenue, Profits, Tax, and Wallet Balances.</p>
-    </div>
+<div class="mb-4">
+    <h4 class="fw-bold text-dark mb-1"><i class="fas fa-chart-line me-2 text-primary"></i>Financial Dashboard</h4>
 </div>
 
+<!-- ROW 1: INCOME & PROFITS -->
 <div class="row g-4 mb-4">
-    <div class="col-md-3">
+    <!-- TOTAL REVENUE -->
+    <div class="col-md-4">
         <a href="/admin/orders" class="text-decoration-none">
-            <div class="card shadow-sm border-0 rounded-4 bg-white border-bottom border-primary border-4 transition-hover">
+            <div class="card shadow-sm border-0 rounded-4 bg-white border-bottom border-primary border-4 transition-hover h-100">
                 <div class="card-body p-4 text-center">
                     <p class="text-muted fw-bold small mb-2">TOTAL REVENUE</p>
-                    <h2 class="fw-bold text-dark">₹{{ "%.2f"|format(report.total_revenue) }}</h2>
+                    <h2 class="fw-bold text-dark">₹{{ "%.2f"|format(report.total_revenue | default(0)) }}</h2>
                     <div class="badge bg-primary bg-opacity-10 text-primary p-2 mt-2">
-                        <i class="fas fa-history me-1"></i> Product History
+                        <i class="fas fa-history me-1"></i> View Orders
                     </div>
                 </div>
             </div>
         </a>
     </div>
 
-    <div class="col-md-3">
-        <a href="/admin/commission-logs" class="text-decoration-none">
-            <div class="card shadow-sm border-0 rounded-4 bg-white border-bottom border-success border-4 transition-hover">
-                <div class="card-body p-4 text-center">
-                    <p class="text-muted fw-bold small mb-2">GROSS PROFIT</p>
-                    <h2 class="fw-bold text-success">₹{{ "%.2f"|format(report.gross_profit) }}</h2>
-                    <div class="badge bg-success bg-opacity-10 text-success p-2 mt-2">
-                        <i class="fas fa-search-dollar me-1"></i> Profit Audit
-                    </div>
-                </div>
+    <!-- GROSS PROFIT (Link removed to prevent errors) -->
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 rounded-4 bg-white border-bottom border-success border-4 transition-hover h-100">
+            <div class="card-body p-4 text-center">
+                <p class="text-muted fw-bold small mb-2">GROSS PROFIT</p>
+                <h2 class="fw-bold text-success">₹{{ "%.2f"|format(report.gross_profit | default(0)) }}</h2>
+                <div class="text-muted small mt-2">Revenue minus Commissions</div>
             </div>
-        </a>
+        </div>
     </div>
 
-    <div class="col-md-3">
-        <a href="/admin/withdraws" class="text-decoration-none">
-            <div class="card shadow-sm border-0 rounded-4 bg-white border-bottom border-warning border-4 transition-hover">
-                <div class="card-body p-4 text-center">
-                    <p class="text-muted fw-bold small mb-2">ADMIN FEES (5%)</p>
-                    <h2 class="fw-bold text-warning">₹{{ "%.2f"|format(report.admin_fees) }}</h2>
-                    <div class="badge bg-warning bg-opacity-10 text-warning p-2 mt-2">
-                        <i class="fas fa-coins me-1"></i> Fee History
-                    </div>
-                </div>
+    <!-- NET PROFIT (Link removed to prevent errors) -->
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 rounded-4 bg-dark text-white transition-hover h-100">
+            <div class="card-body p-4 text-center">
+                <p class="text-light opacity-75 fw-bold small mb-2">NET PROFIT</p>
+                <h2 class="fw-bold text-white">₹{{ "%.2f"|format(report.net_profit | default(0)) }}</h2>
+                <div class="text-light opacity-50 small mt-2">Gross Profit + Admin Fees</div>
             </div>
-        </a>
-    </div>
-
-    <div class="col-md-3">
-        <a href="/admin/withdraws" class="text-decoration-none">
-            <div class="card shadow-sm border-0 rounded-4 bg-dark text-white transition-hover">
-                <div class="card-body p-4 text-center">
-                    <p class="text-light opacity-75 fw-bold small mb-2">NET PROFIT</p>
-                    <h2 class="fw-bold text-white">₹{{ "%.2f"|format(report.net_profit) }}</h2>
-                    <div class="badge bg-white bg-opacity-10 text-white p-2 mt-2">
-                        <i class="fas fa-chart-line me-1"></i> Net Audit
-                    </div>
-                </div>
-            </div>
-        </a>
+        </div>
     </div>
 </div>
 
+<!-- ROW 2: FEES, TAX & LIABILITY -->
 <div class="row g-4">
-    <div class="col-md-6">
+    <!-- ADMIN FEES -->
+    <div class="col-md-4">
         <a href="/admin/withdraws" class="text-decoration-none">
-            <div class="card shadow-sm border-0 rounded-4 bg-white p-4 transition-hover">
-                <div class="d-flex align-items-center justify-content-between">
-                    <div>
-                        <p class="text-muted fw-bold small mb-1">TDS COLLECTED (2%)</p>
-                        <h3 class="fw-bold text-info">₹{{ "%.2f"|format(report.total_tds) }}</h3>
-                        <p class="text-muted extra-small mb-0 mt-2">Audit withheld tax history.</p>
+            <div class="card shadow-sm border-0 rounded-4 bg-white border-bottom border-warning border-4 transition-hover h-100">
+                <div class="card-body p-4 text-center">
+                    <p class="text-muted fw-bold small mb-2">ADMIN FEES (5%)</p>
+                    <h2 class="fw-bold text-warning">₹{{ "%.2f"|format(report.admin_fees | default(0)) }}</h2>
+                    <div class="badge bg-warning bg-opacity-10 text-warning p-2 mt-2">
+                        <i class="fas fa-coins me-1"></i> View Withdrawals
                     </div>
-                    <i class="fas fa-landmark fa-3x text-info opacity-25"></i>
                 </div>
             </div>
         </a>
     </div>
 
-    <div class="col-md-6">
-        <a href="/admin/users" class="text-decoration-none">
-            <div class="card shadow-sm border-0 rounded-4 bg-white p-4 transition-hover">
-                <div class="d-flex align-items-center justify-content-between">
-                    <div>
-                        <p class="text-muted fw-bold small mb-1">SYSTEM LIABILITY</p>
-                        <h3 class="fw-bold text-danger">₹{{ "%.2f"|format(report.total_wallet_liability) }}</h3>
-                        <p class="text-muted extra-small mb-0 mt-2">Audit individual user wallet balances.</p>
+    <!-- TDS COLLECTED -->
+    <div class="col-md-4">
+        <a href="/admin/withdraws" class="text-decoration-none">
+            <div class="card shadow-sm border-0 rounded-4 bg-white p-4 transition-hover h-100 border-bottom border-info border-4">
+                <div class="text-center">
+                    <p class="text-muted fw-bold small mb-2">TDS COLLECTED (TAX)</p>
+                    <h3 class="fw-bold text-info">₹{{ "%.2f"|format(report.total_tds | default(0)) }}</h3>
+                    <div class="badge bg-info bg-opacity-10 text-info p-2 mt-2">
+                        <i class="fas fa-landmark me-1"></i> View Withdrawals
                     </div>
-                    <i class="fas fa-wallet fa-3x text-danger opacity-25"></i>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- SYSTEM LIABILITY -->
+    <div class="col-md-4">
+        <a href="/admin/users" class="text-decoration-none">
+            <div class="card shadow-sm border-0 rounded-4 bg-white p-4 transition-hover h-100 border-bottom border-danger border-4">
+                <div class="text-center">
+                    <p class="text-muted fw-bold small mb-2">SYSTEM LIABILITY</p>
+                    <h3 class="fw-bold text-danger">₹{{ "%.2f"|format(report.total_wallet_liability | default(0)) }}</h3>
+                    <div class="badge bg-danger bg-opacity-10 text-danger p-2 mt-2">
+                        <i class="fas fa-users me-1"></i> View User Wallets
+                    </div>
                 </div>
             </div>
         </a>
@@ -99,11 +94,8 @@
 </div>
 
 <style>
-.transition-hover { transition: all 0.3s ease; }
-.transition-hover:hover { 
-    transform: translateY(-8px); 
-    box-shadow: 0 15px 30px rgba(0,0,0,0.1) !important; 
-}
-.extra-small { font-size: 0.75rem; }
+    .transition-hover { transition: all 0.2s ease; cursor: default; }
+    a .transition-hover { cursor: pointer; }
+    .transition-hover:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important; }
 </style>
 {% endblock %}

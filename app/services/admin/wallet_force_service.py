@@ -1,88 +1,58 @@
 from app.db import get_cursor
+from app.services.wallet_service import credit_wallet, debit_wallet
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def force_wallet_adjust(user_id, amount, action, remark, admin_id):
+    """
+    BUG FIXED #4:
+    - Was using cursor = get_cursor() directly then calling cursor.execute("BEGIN").
+      This crashes because get_cursor() is a context manager not a cursor.
+    - Was querying the 'wallets' table which doesn't exist.
+      The system uses wallet_ledger + wallet_service for all balance operations.
+    - Manual BEGIN/COMMIT is now removed — get_cursor() handles transactions.
 
-    cursor = get_cursor()
+    Now delegates to the existing credit_wallet/debit_wallet in wallet_service,
+    which handles locking, balance checks, and ledger entries correctly.
+    """
+    if action not in ("credit", "debit"):
+        raise ValueError("Invalid action. Must be 'credit' or 'debit'.")
 
-    try:
+    if float(amount) <= 0:
+        raise ValueError("Amount must be greater than zero.")
 
-        # Start transaction
-        cursor.execute("BEGIN")
+    with get_cursor() as cur:
 
-        # Lock wallet row
-        cursor.execute("""
-            SELECT balance
-            FROM wallets
-            WHERE user_id = %s
-            FOR UPDATE
-        """, (user_id,))
-
-        wallet = cursor.fetchone()
-
-        if not wallet:
-            raise Exception("Wallet not found")
-
-        current_balance = wallet["balance"]
-
-        # Validate action
-        if action not in ["credit", "debit"]:
-            raise Exception("Invalid action")
-
-        # Calculate new balance
         if action == "credit":
-            new_balance = current_balance + amount
+            reference = f"admin_credit_{admin_id}_{user_id}"
+            new_balance = credit_wallet(
+                cur, user_id, amount,
+                reference=reference,
+                description=remark or "Admin manual credit"
+            )
+        else:
+            reference = f"admin_debit_{admin_id}_{user_id}"
+            new_balance = debit_wallet(
+                cur, user_id, amount,
+                reference=reference,
+                description=remark or "Admin manual debit"
+            )
 
-        if action == "debit":
-
-            if current_balance < amount:
-                raise Exception("Insufficient balance")
-
-            new_balance = current_balance - amount
-
-        # Update wallet balance
-        cursor.execute("""
-            UPDATE wallets
-            SET balance = %s
-            WHERE user_id = %s
-        """, (new_balance, user_id))
-
-        # Insert ledger record
-        cursor.execute("""
-            INSERT INTO wallet_ledger
-            (user_id, amount, txn_type, remark, created_by)
-            VALUES (%s, %s, %s, %s, %s)
+        # Audit log
+        cur.execute("""
+            INSERT INTO audit_logs
+            (action, user_id, admin_id, metadata, status, created_at)
+            VALUES (%s, %s, %s, %s::jsonb, 'success', NOW())
         """, (
+            f"admin_wallet_{action}",
             user_id,
-            amount,
-            action,
-            remark,
-            admin_id
-        ))
-
-        # Insert audit log
-        cursor.execute("""
-            INSERT INTO admin_audit_logs
-            (admin_id, action, target_user_id, amount, remark)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (
             admin_id,
-            action,
-            user_id,
-            amount,
-            remark
+            f'{{"amount": {amount}, "remark": "{remark}"}}'
         ))
 
-        # Commit transaction
-        cursor.execute("COMMIT")
+        logger.info(f"Admin wallet {action} | user={user_id} | amount={amount} "
+                    f"| admin={admin_id} | new_balance={new_balance}")
 
-        return {
-            "old_balance": current_balance,
-            "new_balance": new_balance
-        }
-
-    except Exception as e:
-
-        cursor.execute("ROLLBACK")
-
-        raise e
+    return {"new_balance": float(new_balance)}

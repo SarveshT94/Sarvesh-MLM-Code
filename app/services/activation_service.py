@@ -1,29 +1,38 @@
 from app.db import get_cursor
-from app.services.commission_service import distribute_commission
+# BUG FIXED #9: was importing from app.services.commission_service which does NOT EXIST.
+# The correct module is app.services.commission_log_service
+from app.services.commission_log_service import distribute_package_commissions
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def activate_user(user_id, purchase_amount, force_commission=False):
     """
     Activate user and optionally trigger commission distribution.
-    """
 
+    BUG FIXED #9:
+    Old import: from app.services.commission_service import distribute_commission
+    The file commission_service.py does not exist anywhere in the project.
+    This caused a ModuleNotFoundError on import, crashing the entire app.
+    Fixed: import from commission_log_service which is the correct module.
+    """
     try:
         with get_cursor() as cur:
 
-            # ✅ Fetch user
             cur.execute("""
                 SELECT id, is_active
                 FROM users
                 WHERE id = %s
             """, (user_id,))
-
             user = cur.fetchone()
 
             if not user:
-                raise Exception("User not found")
+                return {"success": False, "message": "User not found"}
 
-            # ✅ Activate if not active
-            if not user["is_active"]:
+            was_inactive = not user["is_active"]
+
+            if was_inactive:
                 cur.execute("""
                     UPDATE users
                     SET is_active = TRUE,
@@ -31,21 +40,11 @@ def activate_user(user_id, purchase_amount, force_commission=False):
                     WHERE id = %s
                 """, (user_id,))
 
-            # ✅ Run commission
-            if (not user["is_active"]) or force_commission:
-                distribute_commission(cur, user_id, purchase_amount)
+            if was_inactive or force_commission:
+                distribute_package_commissions(cur, user_id, purchase_amount)
 
-        # ✅ Auto commit handled by get_cursor()
-
-        return {
-            "success": True,
-            "message": "Activation and commission processed"
-        }
+        return {"success": True, "message": "Activation and commission processed"}
 
     except Exception as e:
-        # ✅ Auto rollback handled by get_cursor()
-
-        return {
-            "success": False,
-            "message": str(e)
-        }
+        logger.error(f"Activation error for user {user_id}: {str(e)}")
+        return {"success": False, "message": str(e)}
