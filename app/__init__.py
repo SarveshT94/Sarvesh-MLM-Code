@@ -109,7 +109,8 @@ def create_app():
     from app.routes.admin.backup_routes import admin_backup_bp
     from app.routes.admin.package_routes import admin_package_bp
     from app.routes.profile_routes import profile_bp
-
+    from app.routes.admin.report_routes import admin_report_bp
+    
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(admin_package_bp)
     app.register_blueprint(profile_bp)
@@ -126,7 +127,8 @@ def create_app():
     app.register_blueprint(support_bp, url_prefix="/api/support")
     app.register_blueprint(admin_support_bp, url_prefix="/api/admin/support")
     app.register_blueprint(admin_backup_bp, url_prefix="/api/admin/backup")
-
+    app.register_blueprint(admin_report_bp, url_prefix="/api/admin/report")
+    
     # Login Manager
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"

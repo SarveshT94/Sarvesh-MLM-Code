@@ -6,17 +6,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 def distribute_commission(buyer_id, package_id, purchase_ref=None):
     """
     Enterprise Dynamic Commission Engine (Upgraded)
-
-    Improvements:
-    - Stronger idempotency
-    - Better logging
-    - Safer calculations
-    - Future-ready for purchase tracking
     """
+    # IMPORT MOVED HERE TO PREVENT CIRCULAR IMPORT ERROR
+    from app.services.rank_service import evaluate_user_rank_and_bonus
 
     try:
         # 1. Load package
@@ -110,8 +105,64 @@ def distribute_commission(buyer_id, package_id, purchase_ref=None):
                     f"Commission added | sponsor={sponsor_id} | level={level} | amount={total_commission}"
                 )
 
+                # 7. TRIGGER DUAL-ACTION RANK & BONUS CHECK
+                # This ensures the upline gets evaluated for a rank advancement or bonus immediately!
+                evaluate_user_rank_and_bonus(sponsor_id)
+
         return {"status": "success", "message": "Commissions distributed successfully."}
 
     except Exception as e:
         logger.error(f"Commission distribution failed: {str(e)}")
         return {"status": "error", "message": "Commission processing failed"}
+
+
+# -----------------------------------
+# PROCESS RANK VOLUME BONUS
+# -----------------------------------
+def process_rank_volume_bonus(user_id, rank_name, level, bonus_amount, cur=None):
+    """
+    Credits the one-time Volume Fast Action Bonus directly to the user's wallet.
+    Uses the existing DB cursor to ensure it commits securely with the rank check.
+    """
+    try:
+        reference_str = f"VOL_BONUS_L{level}_{rank_name.upper()}"
+        
+        def _execute_wallet_credit(cursor):
+            # 1. Insert into commissions table for reporting
+            cursor.execute("""
+                INSERT INTO commissions
+                (earner_id, from_user_id, level, amount, commission_type)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                user_id, 
+                user_id, # Self-generated bonus
+                level, 
+                bonus_amount, 
+                reference_str
+            ))
+
+            # 2. Add directly to the Wallet Ledger
+            cursor.execute("""
+                INSERT INTO wallet_ledger
+                (user_id, amount, transaction_type, reference)
+                VALUES (%s, %s, %s, %s)
+            """, (
+                user_id,
+                bonus_amount,
+                "rank_volume_bonus",
+                reference_str
+            ))
+            logger.info(f"Rank Volume Bonus Wallet Credit Success: User {user_id} | Amount {bonus_amount}")
+
+        # Execute using passed cursor (transaction safe) or create a new one
+        if cur:
+            _execute_wallet_credit(cur)
+        else:
+            with get_cursor() as new_cur:
+                _execute_wallet_credit(new_cur)
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to process rank volume bonus for user {user_id}: {str(e)}")
+        return False

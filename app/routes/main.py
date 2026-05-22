@@ -794,3 +794,12 @@ def admin_user_network(user_id):
 @main.route("/test-route")
 def test_route():
     return "Working"
+
+
+# =========================================================
+# RANK MANAGEMENT UI
+# =========================================================
+@main.route("/admin/ranks")
+@admin_required
+def admin_ranks_page():
+    return render_template("admin/ranks.html")

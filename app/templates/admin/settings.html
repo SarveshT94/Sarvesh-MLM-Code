@@ -5,34 +5,34 @@
 
 {% block content %}
 <div class="mb-4">
-    <h4 class="fw-bold mb-0">🏢 Company Settings</h4>
-    <p class="text-muted mb-0 mt-1">Manage global details, contact information, and billing addresses.</p>
+    <h4 class="fw-bold mb-0 text-white">🏢 Company Settings</h4>
+    <p class="text-white-50 mb-0 mt-1">Manage global details, contact information, billing addresses, and official bank accounts.</p>
 </div>
 
 <div class="row">
     <div class="col-lg-8 mx-auto">
-        <div class="card shadow-sm border-0 rounded-4">
+        <div class="card shadow-lg border-0 rounded-4 mb-5">
             <div class="card-header bg-white border-bottom-0 pt-4 pb-0 px-4">
-                <h5 class="fw-bold text-dark"><i class="bi bi-building-gear text-primary me-2"></i> Update Profile</h5>
+                <h5 class="fw-bold text-dark"><i class="bi bi-building-gear text-primary me-2"></i> Update Profile & Banking</h5>
             </div>
-            <div class="card-body p-4">
+            <div class="card-body p-4 bg-white rounded-bottom-4">
                 <form action="/admin/settings" method="POST" enctype="multipart/form-data">
 
                     <h6 class="fw-bold text-muted border-bottom pb-2 mb-3 mt-2 text-uppercase tracking-wider small">General Information</h6>
 
                     <div class="mb-3">
                         <label class="form-label fw-bold small">Company Name</label>
-                        <input type="text" name="company_name" class="form-control" value="{{ settings['company_name'] if settings else '' }}" required placeholder="e.g. RK Trendz">
+                        <input type="text" name="company_name" class="form-control bg-light" value="{{ settings['company_name'] if settings else '' }}" required placeholder="e.g. RK Trendz">
                     </div>
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
                             <label class="form-label fw-bold small">GST Number (Optional)</label>
-                            <input type="text" name="gst_number" class="form-control" value="{{ settings['gst_number'] if settings else '' }}" placeholder="22AAAAA0000A1Z5">
+                            <input type="text" name="gst_number" class="form-control bg-light" value="{{ settings['gst_number'] if settings else '' }}" placeholder="22AAAAA0000A1Z5">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-bold small">Company Logo (Optional)</label>
-                            <input type="file" name="logo_file" class="form-control" accept="image/*">
+                            <input type="file" name="logo_file" class="form-control bg-light" accept="image/*">
                             
                             <input type="hidden" name="existing_logo_url" value="{{ settings['logo_url'] if settings else '' }}">
                             
@@ -49,11 +49,11 @@
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
                             <label class="form-label fw-bold small"><i class="bi bi-envelope text-danger me-1"></i> Support Email</label>
-                            <input type="email" name="support_email" class="form-control" value="{{ settings['support_email'] if settings else '' }}" required placeholder="support@company.com">
+                            <input type="email" name="support_email" class="form-control bg-light" value="{{ settings['support_email'] if settings else '' }}" required placeholder="support@company.com">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-bold small"><i class="bi bi-telephone text-success me-1"></i> Support Phone</label>
-                            <input type="text" name="support_phone" class="form-control" value="{{ settings['support_phone'] if settings else '' }}" required placeholder="+91 9876543210">
+                            <input type="text" name="support_phone" class="form-control bg-light" value="{{ settings['support_phone'] if settings else '' }}" required placeholder="+91 9876543210">
                         </div>
                     </div>
 
@@ -61,16 +61,46 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-bold small"><i class="bi bi-geo-alt text-info me-1"></i> Head Office Address</label>
-                        <textarea name="head_office_address" class="form-control" rows="2" required placeholder="Enter full primary address...">{{ settings['head_office_address'] if settings else '' }}</textarea>
+                        <textarea name="head_office_address" class="form-control bg-light" rows="2" required placeholder="Enter full primary address...">{{ settings['head_office_address'] if settings else '' }}</textarea>
                     </div>
 
                     <div class="mb-4">
                         <label class="form-label fw-bold small"><i class="bi bi-geo text-secondary me-1"></i> Branch Address (Optional)</label>
-                        <textarea name="branch_address" class="form-control" rows="2" placeholder="Enter secondary branch address...">{{ settings['branch_address'] if settings else '' }}</textarea>
+                        <textarea name="branch_address" class="form-control bg-light" rows="2" placeholder="Enter secondary branch address...">{{ settings['branch_address'] if settings else '' }}</textarea>
                     </div>
 
-                    <button type="submit" class="btn btn-primary w-100 fw-bold shadow-sm py-2">
-                        <i class="bi bi-save2 me-2"></i> Save Company Settings
+                    <h6 class="fw-bold text-muted border-bottom pb-2 mb-3 mt-5 text-uppercase tracking-wider small"><i class="bi bi-bank2 text-primary me-1"></i> Official Payment Account</h6>
+                    <p class="small text-muted mb-3">These details are shown dynamically to users on the frontend checkout page.</p>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">Bank Name</label>
+                            <input type="text" name="bank_name" class="form-control bg-light" value="{{ settings['bank_name'] if settings else '' }}" required placeholder="e.g. HDFC Bank">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">Account Holder Name</label>
+                            <input type="text" name="account_holder_name" class="form-control bg-light" value="{{ settings['account_holder_name'] if settings else '' }}" required placeholder="e.g. RK Trendz Pvt Ltd">
+                        </div>
+                    </div>
+                    
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">Account Number</label>
+                            <input type="text" name="account_number" class="form-control bg-light" value="{{ settings['account_number'] if settings else '' }}" required placeholder="e.g. 50100200300400">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">IFSC Code</label>
+                            <input type="text" name="ifsc_code" class="form-control bg-light" value="{{ settings['ifsc_code'] if settings else '' }}" required placeholder="e.g. HDFC0001234">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold small">Official UPI ID</label>
+                        <input type="text" name="upi_id" class="form-control bg-light" value="{{ settings['upi_id'] if settings else '' }}" placeholder="e.g. rktrendz@ybl">
+                    </div>
+
+                    <button type="submit" class="btn w-100 fw-bold shadow-sm py-3 text-white mt-3" style="background-color: #D6628E; border-radius: 10px; font-size: 16px;">
+                        <i class="bi bi-floppy-fill me-2"></i> Save All Settings
                     </button>
                 </form>
             </div>

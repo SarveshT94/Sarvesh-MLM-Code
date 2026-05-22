@@ -120,7 +120,8 @@ def create_app():
     app.register_blueprint(support_bp, url_prefix="/api/support")
     app.register_blueprint(admin_support_bp, url_prefix="/api/admin/support")
     app.register_blueprint(admin_backup_bp, url_prefix="/api/admin/backup")
-
+    app.register_blueprint(rank_bp)
+    
     # -----------------------------
     # 4. Login Manager
     # -----------------------------
