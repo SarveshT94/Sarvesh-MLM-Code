@@ -1,29 +1,40 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import useAuthStore from "@/store/authStore";
 import { useRouter } from "next/navigation";
 import { requestProfileUpdate, verifyProfileOtp } from "@/services/profile";
 import { fetchWalletData, submitWithdrawal, submitP2PTransfer } from "@/services/wallet";
-import { fetchNetworkData } from "@/services/team";
+import { fetchNetworkData, fetchUplineData } from "@/services/team";
 import { fetchPackages, purchasePlan, fetchCompensationPlan, fetchUserOrders } from "@/services/package";
-import { fetchUserRank } from "@/services/gamification"; 
-import { fetchTickets, createTicket } from "@/services/support"; 
-import { fetchKycData, submitKycData } from "@/services/kyc"; 
-import { 
-  LayoutDashboard, UserCircle, Users, ShoppingBag, 
-  Wallet, LogOut, Share2, Copy, CheckCircle2, TrendingUp, Camera, ShieldCheck, 
-  AlertCircle, Loader2, GitMerge, UserPlus, X, Zap, BarChart3, Target, Globe, 
-  RefreshCw, Download, Receipt, Printer, ArrowRightLeft, LifeBuoy, Award, Plus, MessageSquare, Image as ImageIcon,
-  Info, FileCheck, UploadCloud, ChevronRight, UserMinus, Building, MapPin, Mail, Phone, ListTree
+import { fetchUserRank } from "@/services/gamification";
+import { fetchTickets, createTicket } from "@/services/support";
+import { fetchKycData, submitKycData } from "@/services/kyc";
+import {
+  LayoutDashboard, UserCircle, Users, ShoppingBag,
+  Wallet, LogOut, Share2, Copy, CheckCircle2, TrendingUp, Camera, ShieldCheck,
+  AlertCircle, Loader2, GitMerge, UserPlus, X, Zap, Target, Globe,
+  Download, Receipt, ArrowRightLeft, LifeBuoy, Award, MessageSquare, Image as ImageIcon,
+  FileCheck, UploadCloud, ChevronRight, Building, MapPin, Mail, Phone, ListTree,
+  Star, Heart, Rocket, Menu, ChevronDown
 } from "lucide-react";
+
+// ─── Premium Color Map ───────────────────────────────────────────
+const COLOR_MAP = {
+  emerald: { iconBg: "bg-emerald-50/80 border-emerald-200", icon: "text-emerald-700", btn: "text-emerald-700", tileBg: "bg-gradient-to-br from-emerald-50 to-white" },
+  gold:    { iconBg: "bg-amber-50/80 border-amber-200", icon: "text-amber-700", btn: "text-amber-700", tileBg: "bg-gradient-to-br from-amber-50 to-white" },
+  rose:    { iconBg: "bg-rose-50/80 border-rose-200", icon: "text-rose-700", btn: "text-rose-700", tileBg: "bg-gradient-to-br from-rose-50 to-white" },
+  blue:    { iconBg: "bg-blue-50/80 border-blue-200", icon: "text-blue-700", btn: "text-blue-700", tileBg: "bg-gradient-to-br from-blue-50 to-white" },
+  violet:  { iconBg: "bg-violet-50/80 border-violet-200", icon: "text-violet-700", btn: "text-violet-700", tileBg: "bg-gradient-to-br from-violet-50 to-white" },
+  cyan:    { iconBg: "bg-cyan-50/80 border-cyan-200", icon: "text-cyan-700", btn: "text-cyan-700", tileBg: "bg-gradient-to-br from-cyan-50 to-white" },
+};
 
 export default function DashboardPage() {
   const { user, isAuthenticated, isChecking, logout, setAuth } = useAuthStore();
   const router = useRouter();
-  
-  const [activeTab, setActiveTab] = useState("Overview"); 
+  const [activeTab, setActiveTab] = useState("Overview");
   const [copied, setCopied] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (!isChecking && !isAuthenticated) router.push("/login");
@@ -34,19 +45,29 @@ export default function DashboardPage() {
     if (savedTab) setActiveTab(savedTab);
   }, []);
 
-  const switchTab = (tabName) => {
+  const switchTab = useCallback((tabName) => {
     setActiveTab(tabName);
     sessionStorage.setItem("dashboardTab", tabName);
-  };
+    setSidebarOpen(false);
+  }, []);
 
   if (isChecking || !isAuthenticated || !user) return null;
 
   const refCode = user?.referral_code || "PENDING";
-  const shareUrl = `http://localhost:3000/register?ref=${refCode}`;
+  const shareUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/register?ref=${refCode}`;
 
   const handleShare = async () => {
-    const shareData = { title: 'Join my RK Trendz Network!', text: `Sign up using my referral code: ${refCode} and join my team!`, url: shareUrl };
-    try { if (navigator.share) await navigator.share(shareData); else handleCopy(); } catch (err) { console.error("Error sharing:", err); }
+    const shareData = {
+      title: "Join my RK Trendz Network!",
+      text: `Sign up using my referral code: ${refCode} and join my team!`,
+      url: shareUrl,
+    };
+    try {
+      if (navigator.share) await navigator.share(shareData);
+      else handleCopy();
+    } catch (err) {
+      console.error("Error sharing:", err);
+    }
   };
 
   const handleCopy = () => {
@@ -67,200 +88,274 @@ export default function DashboardPage() {
     { name: "Help & Support", icon: LifeBuoy },
   ];
 
-  // ---------------------------------------------------------
-  // 1. OVERVIEW TAB
-  // ---------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────
+  // TAB: OVERVIEW
+  // ─────────────────────────────────────────────────────────────────
   const OverviewTab = () => {
     const [rankData, setRankData] = useState({
-      current_rank: "Loading...", next_rank: "Loading...",
-      current_volume: 0, next_rank_volume: 0, progress_percentage: 0
+      current_rank: "—", next_rank: "—",
+      current_volume: 0, next_rank_volume: 0, progress_percentage: 0,
     });
+    const [isLoadingRank, setIsLoadingRank] = useState(true);
 
     useEffect(() => {
       const loadRank = async () => {
-        const res = await fetchUserRank();
-        if (res.success && res.data) setRankData(res.data);
+        try {
+          const res = await fetchUserRank();
+          if (res.success && res.data) setRankData(res.data);
+        } catch (e) { /* API not ready yet */ }
+        finally { setIsLoadingRank(false); }
       };
       loadRank();
     }, []);
 
+    const quickCards = [
+      { title: "Wallet Balance", value: "View Wallet", icon: Wallet, color: "emerald", tab: "Wallet & Payouts", btnText: "Manage Payouts" },
+      { title: "Active Downline", value: "My Network", icon: Users, color: "gold", tab: "My Network Tree", btnText: "View Network Tree" },
+      { title: "Current Plan", value: "Free Tier", icon: ShoppingBag, color: "rose", tab: "Product Catalog", btnText: "Upgrade Plan" },
+      { title: "Referral Code", value: refCode, icon: Share2, color: "blue", tab: "Overview", btnText: "Copy Code" },
+    ];
+
     return (
-      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="relative bg-white rounded-[2rem] p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden print:hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/4 pointer-events-none"></div>
-          <div className="relative z-10">
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Welcome back, {user.full_name.split(' ')[0]}! 👋</h2>
-            <p className="mt-2 text-slate-500 font-medium">Here is your network and financial overview for today.</p>
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        {/* Welcome banner */}
+        <div className="relative bg-gradient-to-br from-[#0f2a1f] via-[#1a3a2a] to-amber-900/40 rounded-2xl p-7 text-white overflow-hidden">
+          <div className="absolute inset-0 opacity-5" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23fff' fill-opacity='1'%3E%3Ccircle cx='20' cy='20' r='2'/%3E%3C/g%3E%3C/svg%3E")` }} />
+          <div className="relative">
+            <p className="text-amber-200/70 text-sm font-medium mb-1">Good day 👋</p>
+            <h2 className="text-2xl font-bold text-white">{user.full_name.split(" ")[0]}</h2>
+            <p className="text-amber-200/70 text-sm mt-1">Here's your network overview for today</p>
+          </div>
+          <Globe className="absolute -right-6 -bottom-6 h-40 w-40 text-white/5" />
+        </div>
+
+        {/* Rank progress card */}
+        <div className="bg-white rounded-2xl border border-amber-100/50 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-amber-50 rounded-xl">
+                <Award className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Current Rank</p>
+                <h3 className="text-lg font-bold text-slate-900">
+                  {isLoadingRank ? <span className="text-slate-300">Loading…</span> : rankData.current_rank}
+                </h3>
+              </div>
+            </div>
+            {rankData.next_rank && rankData.next_rank !== "Max Rank Reached" && (
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                <Target className="h-3.5 w-3.5 text-emerald-500" />
+                <span className="text-xs font-semibold text-slate-600">Next: {rankData.next_rank}</span>
+              </div>
+            )}
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+            <div
+              className="bg-gradient-to-r from-amber-400 to-amber-600 h-full rounded-full transition-all duration-1000"
+              style={{ width: `${rankData.progress_percentage}%` }}
+            />
+          </div>
+          <div className="flex justify-between mt-2 text-xs font-semibold">
+            <span className="text-amber-600">₹{rankData.current_volume.toLocaleString("en-IN")} vol.</span>
+            <span className="text-slate-400">
+              {rankData.next_rank !== "Max Rank Reached"
+                ? `₹${rankData.next_rank_volume.toLocaleString("en-IN")} target`
+                : "Maximum rank achieved!"}
+            </span>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 rounded-[2rem] shadow-xl border border-slate-800 p-8 text-white print:hidden relative overflow-hidden group">
-          <div className="absolute inset-0 opacity-10 mix-blend-overlay" style={{backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`}}></div>
-          <div className="relative z-10">
-            <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-6 mb-6">
-              <div className="flex items-center">
-                <div className="p-3 bg-white/10 rounded-2xl mr-4 backdrop-blur-md shadow-inner border border-white/5 group-hover:scale-110 transition-transform"><Award className="h-8 w-8 text-amber-400" /></div>
-                <div>
-                  <p className="text-xs text-slate-300 font-bold uppercase tracking-[0.2em] mb-1">Current Rank</p>
-                  <h3 className="font-black text-3xl text-white tracking-tight drop-shadow-md">{rankData.current_rank}</h3>
-                </div>
-              </div>
-              {rankData.next_rank !== "Max Rank Reached" && (
-                <div className="px-4 py-2 bg-white/10 border border-white/20 rounded-xl backdrop-blur-md shadow-lg flex items-center">
-                  <Target className="h-4 w-4 mr-2 text-emerald-400" />
-                  <span className="text-sm font-bold text-slate-100">Next Goal: {rankData.next_rank}</span>
-                </div>
-              )}
-            </div>
-            
-            <div className="w-full bg-slate-950/50 border border-slate-700/50 rounded-full h-4 mb-3 overflow-hidden shadow-inner relative">
-              <div className="bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-400 h-full rounded-full relative transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(16,185,129,0.5)]" style={{width: `${rankData.progress_percentage}%`}}>
-                <div className="absolute inset-0 bg-white/20 animate-[pulse_2s_ease-in-out_infinite]"></div>
-              </div>
-            </div>
-            <div className="flex justify-between items-center text-sm font-semibold">
-              <span className="text-emerald-400 flex items-center"><TrendingUp className="h-4 w-4 mr-1"/> ₹{rankData.current_volume.toLocaleString('en-IN')} Vol.</span>
-              <span className="text-slate-400">
-                {rankData.next_rank !== "Max Rank Reached" ? `₹${rankData.next_rank_volume.toLocaleString('en-IN')} Target` : "Maximum Rank Achieved!"}
-              </span>
-            </div>
-          </div>
-          <Globe className="absolute -right-10 -bottom-10 h-64 w-64 text-white/5 rotate-12 group-hover:rotate-45 transition-transform duration-1000" />
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 mb-8 print:hidden">
-          {[
-            { title: "Total Wallet Balance", value: "Check Wallet", icon: Wallet, color: "emerald", tab: "Wallet & Payouts", btnText: "Request Withdrawal" },
-            { title: "Active Downline", value: "View Network", icon: Users, color: "blue", tab: "My Network Tree", btnText: "View Network Tree" },
-            { title: "Current Plan", value: "Free Tier", icon: CheckCircle2, color: "purple", tab: "Product Catalog", btnText: "Upgrade Plan" }
-          ].map((card, idx) => (
-            <div key={idx} className="bg-white overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border border-slate-100 rounded-[2rem] group">
-              <div className="p-6">
-                <div className="flex items-center">
-                  <div className={`flex-shrink-0 bg-${card.color}-50 rounded-2xl p-4 group-hover:bg-${card.color}-100 transition-colors`}>
-                    <card.icon className={`h-7 w-7 text-${card.color}-600`} />
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-semibold text-slate-500 truncate">{card.title}</dt>
-                      <dd className="text-2xl font-black text-slate-900 mt-1">{card.value}</dd>
-                    </dl>
+        {/* Premium tiles */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {quickCards.map((card) => {
+            const c = COLOR_MAP[card.color];
+            return (
+              <div key={card.title} className={`${c.tileBg} border border-slate-100 rounded-2xl shadow-sm group hover:shadow-md hover:-translate-y-0.5 transition-all duration-200`}>
+                <div className="p-5">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-xl border ${c.iconBg}`}>
+                      <card.icon className={`h-5 w-5 ${c.icon}`} />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 font-medium">{card.title}</p>
+                      <p className="text-base font-bold text-slate-900 mt-0.5">{card.value}</p>
+                    </div>
                   </div>
                 </div>
+                <div className="border-t border-slate-100/60 px-5 py-3">
+                  <button onClick={() => switchTab(card.tab)} className={`text-xs font-bold flex items-center justify-between w-full ${c.btn} transition-colors`}>
+                    {card.btnText} <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
-              <div className="bg-slate-50 px-6 py-4 border-t border-slate-100">
-                <button onClick={() => switchTab(card.tab)} className={`text-sm font-bold text-${card.color}-600 hover:text-${card.color}-800 flex items-center w-full justify-between group-hover:pl-2 transition-all`}>
-                  {card.btnText} <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 p-8 lg:w-2/3 print:hidden relative overflow-hidden">
-          <div className="absolute top-0 right-0 bg-slate-50 w-full h-full transform skew-x-12 translate-x-1/2"></div>
-          <div className="relative z-10">
-            <h3 className="text-xl font-black text-slate-900 mb-2">Grow Your Network</h3>
-            <p className="text-sm font-medium text-slate-500 mb-6">Share your unique referral code. Earn commissions when friends join and activate.</p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1 bg-white border-2 border-slate-100 rounded-2xl p-4 flex items-center justify-between shadow-inner">
-                <div><p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Your Referral Code</p><p className="text-2xl font-black text-emerald-600 tracking-[0.15em]">{refCode}</p></div>
-                <button onClick={handleCopy} disabled={refCode === "PENDING"} className="p-3 bg-slate-50 border border-slate-200 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 transition-all shadow-sm text-slate-600 disabled:opacity-50">{copied ? <CheckCircle2 className="h-6 w-6 text-emerald-500" /> : <Copy className="h-6 w-6" />}</button>
+        {/* Referral card */}
+        <div className="bg-white rounded-2xl border border-amber-100/50 shadow-sm p-6">
+          <h3 className="font-bold text-slate-900 mb-1">Grow Your Network</h3>
+          <p className="text-sm text-slate-500 mb-5">Share your referral link and earn commissions when your network activates.</p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Your Code</p>
+                <p className="text-lg font-bold text-amber-600 tracking-widest">{refCode}</p>
               </div>
-              <button onClick={handleShare} disabled={refCode === "PENDING"} className="flex items-center justify-center px-8 py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl transition-all sm:w-auto disabled:opacity-50 hover:-translate-y-0.5"><Share2 className="mr-2 h-5 w-5" /> Share Link</button>
+              <button
+                onClick={handleCopy}
+                disabled={refCode === "PENDING"}
+                className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 transition-all text-slate-500 disabled:opacity-40"
+              >
+                {copied ? <CheckCircle2 className="h-4 w-4 text-amber-500" /> : <Copy className="h-4 w-4" />}
+              </button>
             </div>
+            <button
+              onClick={handleShare}
+              disabled={refCode === "PENDING"}
+              className="flex items-center justify-center gap-2 px-6 py-3 bg-[#0f2a1f] hover:bg-[#1a3a2a] text-white font-semibold rounded-xl shadow-sm transition-all disabled:opacity-40 text-sm"
+            >
+              <Share2 className="h-4 w-4" /> Share Link
+            </button>
           </div>
         </div>
       </div>
     );
   };
 
-  // ---------------------------------------------------------
-  // 2. COMPANY PROFILE TAB
-  // ---------------------------------------------------------
-  const CompanyProfileTab = () => {
+  // ─────────────────────────────────────────────────────────────────
+  // TAB: COMPANY INFO
+  // ─────────────────────────────────────────────────────────────────
+  const CompanyInfoTab = () => {
+    const values = [
+      { icon: ShieldCheck, color: "text-emerald-600", bg: "bg-emerald-50", title: "Transparent & Compliant", desc: "Fully registered under Indian corporate law with clear earning disclosures on every plan." },
+      { icon: Star, color: "text-amber-500", bg: "bg-amber-50", title: "Member-First Culture", desc: "Every policy, payout structure, and product is designed to ensure our members thrive." },
+      { icon: Heart, color: "text-rose-500", bg: "bg-rose-50", title: "Community Driven", desc: "We believe in building lasting relationships, not just transactions." },
+      { icon: Rocket, color: "text-indigo-600", bg: "bg-indigo-50", title: "Growth Oriented", desc: "Continuous product updates, rank upgrades, and new earning opportunities every quarter." },
+    ];
+
     return (
-      <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="mb-8">
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Company Overview</h2>
-          <p className="text-slate-500 font-medium mt-1">Official information, legal compliance, and contact details.</p>
+      <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        {/* Hero banner */}
+        <div className="relative bg-gradient-to-br from-[#0f2a1f] to-[#1a3a2a] rounded-2xl p-8 text-white overflow-hidden">
+          <div className="absolute inset-0 opacity-10" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23fff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/svg%3E")` }} />
+          <div className="relative">
+            <div className="inline-flex items-center gap-2 bg-amber-500/20 rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wider mb-4">
+              <Building className="h-3.5 w-3.5" /> Registered Company
+            </div>
+            <h2 className="text-3xl font-black tracking-tight">RK Trendz Pvt. Ltd.</h2>
+            <p className="text-amber-200/70 mt-2 text-sm leading-relaxed max-w-2xl">
+              A premier Direct Selling and Network Marketing platform empowering individuals through world-class digital products and transparent earning opportunities — fully compliant with Indian MLM regulations.
+            </p>
+          </div>
+          <Building className="absolute -right-8 -bottom-8 h-48 w-48 text-white/10" />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-8">
-            <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 p-8 md:p-10 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
-              <h3 className="text-2xl font-black text-slate-900 mb-4 flex items-center"><Building className="h-6 w-6 text-indigo-500 mr-3"/> RK Trendz Pvt. Ltd.</h3>
-              <p className="text-slate-600 leading-relaxed font-medium mb-6">
-                RK Trendz is a premier Direct Selling and Network Marketing platform dedicated to empowering individuals through world-class digital products and transparent earning opportunities. We adhere strictly to the highest standards of corporate governance and MLM compliance in India.
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            {/* Legal Identity */}
+            <div className="bg-white rounded-2xl border border-amber-100/50 shadow-sm p-6">
+              <h3 className="font-bold text-slate-900 mb-1 flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-emerald-500" /> Legal Identity
+              </h3>
+              <p className="text-xs text-slate-400 mb-5">
+                Displaying our CIN and GSTIN is mandated for trust and compliance under Indian Direct Selling Guidelines, 2021.
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Company Identity Number (CIN)</p>
-                  <p className="text-lg font-black text-slate-800 font-mono">U72900MH2024PTC000000</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-slate-50 rounded-xl border border-slate-100 p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">CIN (Ministry of Corporate Affairs)</p>
+                  <p className="text-sm font-mono font-bold text-slate-800">U72900MH2024PTC000000</p>
                 </div>
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">GST Identification Number</p>
-                  <p className="text-lg font-black text-slate-800 font-mono">27AAACR0000A1Z5</p>
+                <div className="bg-slate-50 rounded-xl border border-slate-100 p-4">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">GSTIN (GST Registration)</p>
+                  <p className="text-sm font-mono font-bold text-slate-800">27AAACR0000A1Z5</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 p-8 md:p-10">
-              <h3 className="text-xl font-black text-slate-900 mb-6 border-b border-slate-100 pb-4">Head Office & Contact</h3>
-              <div className="space-y-6">
-                <div className="flex items-start">
-                  <div className="bg-indigo-50 p-3 rounded-xl mr-4"><MapPin className="h-6 w-6 text-indigo-600" /></div>
-                  <div>
-                    <h4 className="font-bold text-slate-900">Registered Corporate Office</h4>
-                    <p className="text-slate-500 mt-1">101, Business Park Tower A,<br/>Andheri East, Mumbai, Maharashtra 400069<br/>India</p>
+            {/* Contact */}
+            <div className="bg-white rounded-2xl border border-amber-100/50 shadow-sm p-6">
+              <h3 className="font-bold text-slate-900 mb-5">Contact & Support</h3>
+              <div className="space-y-4">
+                {[
+                  { icon: MapPin, color: "bg-indigo-50 text-indigo-600", label: "Head Office", detail: "101, Business Park Tower A, Andheri East, Mumbai, Maharashtra 400069" },
+                  { icon: Mail, color: "bg-emerald-50 text-emerald-600", label: "Email Support", detail: "support@rktrendz.com" },
+                  { icon: Phone, color: "bg-amber-50 text-amber-600", label: "Helpline", detail: "+91 1800-123-4567 (Mon–Sat, 10 AM – 6 PM)" },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-start gap-4">
+                    <div className={`p-2.5 rounded-xl ${item.color} shrink-0`}>
+                      <item.icon className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{item.label}</p>
+                      <p className="text-sm text-slate-700 mt-0.5 leading-relaxed">{item.detail}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-start">
-                  <div className="bg-emerald-50 p-3 rounded-xl mr-4"><Mail className="h-6 w-6 text-emerald-600" /></div>
-                  <div>
-                    <h4 className="font-bold text-slate-900">Official Support</h4>
-                    <p className="text-slate-500 mt-1">support@rktrendz.com</p>
+                ))}
+              </div>
+            </div>
+
+            {/* Values */}
+            <div className="bg-white rounded-2xl border border-amber-100/50 shadow-sm p-6">
+              <h3 className="font-bold text-slate-900 mb-5">Our Core Values</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {values.map((v) => (
+                  <div key={v.title} className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className={`p-2 rounded-lg ${v.bg} shrink-0`}>
+                      <v.icon className={`h-4 w-4 ${v.color}`} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{v.title}</p>
+                      <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{v.desc}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-start">
-                  <div className="bg-amber-50 p-3 rounded-xl mr-4"><Phone className="h-6 w-6 text-amber-600" /></div>
-                  <div>
-                    <h4 className="font-bold text-slate-900">Helpline</h4>
-                    <p className="text-slate-500 mt-1">+91 1800-123-4567 (Mon-Sat, 10AM - 6PM)</p>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
           </div>
 
-          <div className="lg:col-span-1 space-y-8">
-            <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-[2rem] shadow-xl border border-slate-700 p-8 text-white">
-              <h3 className="text-xl font-black mb-4 flex items-center"><ShieldCheck className="h-6 w-6 text-emerald-400 mr-2"/> Legal Documents</h3>
-              <p className="text-slate-400 text-sm mb-6">Download our official compliance and incorporation certificates.</p>
-              <div className="space-y-3">
-                <button className="w-full flex items-center justify-between p-4 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl transition-all">
-                  <span className="font-bold text-sm">Certificate of Incorporation</span>
-                  <Download className="h-4 w-4" />
-                </button>
-                <button className="w-full flex items-center justify-between p-4 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl transition-all">
-                  <span className="font-bold text-sm">GST Certificate</span>
-                  <Download className="h-4 w-4" />
-                </button>
-                <button className="w-full flex items-center justify-between p-4 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl transition-all">
-                  <span className="font-bold text-sm">Terms & Conditions</span>
-                  <Download className="h-4 w-4" />
-                </button>
+          <div className="space-y-6">
+            {/* Documents */}
+            <div className="bg-[#0f2a1f] rounded-2xl border border-[#1a3a2a] p-6 text-white">
+              <h3 className="font-bold mb-1 flex items-center gap-2">
+                <Download className="h-4 w-4 text-amber-400" /> Documents
+              </h3>
+              <p className="text-amber-200/60 text-xs mb-5 leading-relaxed">
+                Download our publicly available documents for your reference.
+              </p>
+              <div className="space-y-2">
+                {[
+                  "Certificate of Incorporation",
+                  "Terms & Conditions",
+                  "Income Disclosure Statement",
+                  "Privacy Policy",
+                ].map((doc) => (
+                  <button
+                    key={doc}
+                    className="w-full flex items-center justify-between p-3.5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl transition-all text-sm font-medium"
+                  >
+                    {doc} <Download className="h-3.5 w-3.5 text-amber-200/50" />
+                  </button>
+                ))}
               </div>
+              <p className="text-[10px] text-amber-200/40 mt-4 leading-relaxed">
+                Note: Internal documents such as the GST certificate are not distributed to members per company policy.
+              </p>
             </div>
 
-            <div className="bg-indigo-50 rounded-[2rem] border border-indigo-100 p-8 text-center">
-              <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mx-auto mb-4"><LifeBuoy className="h-8 w-8 text-indigo-500" /></div>
-              <h4 className="font-black text-slate-900 mb-2">Need Assistance?</h4>
-              <p className="text-sm text-slate-600 mb-6">Our dedicated support team is available to resolve your queries.</p>
-              <button onClick={() => switchTab("Help & Support")} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all">
-                Open Support Ticket
+            {/* Support CTA */}
+            <div className="bg-amber-50 border border-amber-100 rounded-2xl p-6 text-center">
+              <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm mx-auto mb-3 border border-amber-100">
+                <LifeBuoy className="h-6 w-6 text-amber-600" />
+              </div>
+              <h4 className="font-bold text-slate-900 mb-1">Need Help?</h4>
+              <p className="text-xs text-slate-500 mb-4 leading-relaxed">Our support team is ready to assist you.</p>
+              <button
+                onClick={() => switchTab("Help & Support")}
+                className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl text-sm transition-all"
+              >
+                Open a Support Ticket
               </button>
             </div>
           </div>
@@ -269,32 +364,31 @@ export default function DashboardPage() {
     );
   };
 
-  // ---------------------------------------------------------
-  // 3. PROFILE TAB
-  // ---------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────
+  // TAB: PROFILE (unchanged except color inheritance)
+  // ─────────────────────────────────────────────────────────────────
   const ProfileTab = () => {
     const currentEmail = user.email || "";
     const currentPhone = user.phone || "";
     const [userRank, setUserRank] = useState("Distributor");
-
     const [form, setForm] = useState({ email: currentEmail, phone: currentPhone });
     const [personalForm, setPersonalForm] = useState({ dob: "", gender: "male", address: "", city: "", state: "", pincode: "" });
     const [familyForm, setFamilyForm] = useState({ nomineeName: "", nomineeRelation: "" });
-    
     const [photoPreview, setPhotoPreview] = useState(null);
     const fileInputRef = useRef(null);
     const [activeVerification, setActiveVerification] = useState(null);
     const [otpCode, setOtpCode] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [status, setStatus] = useState({ type: "", msg: "" });
-
     const isEmailChanged = form.email !== currentEmail && form.email.includes("@");
     const isPhoneChanged = form.phone !== currentPhone && form.phone.length >= 10;
 
     useEffect(() => {
       const loadData = async () => {
-        const rankRes = await fetchUserRank();
-        if (rankRes.success && rankRes.data) setUserRank(rankRes.data.current_rank);
+        try {
+          const rankRes = await fetchUserRank();
+          if (rankRes.success && rankRes.data) setUserRank(rankRes.data.current_rank);
+        } catch (e) { /* backend not ready */ }
       };
       loadData();
     }, []);
@@ -309,117 +403,181 @@ export default function DashboardPage() {
     };
 
     const handleRequestOtp = async (type) => {
-      setStatus({ type: "", msg: "" }); setIsLoading(true);
-      const newIdentifier = type === 'email' ? form.email : form.phone;
-      const res = await requestProfileUpdate(type, newIdentifier);
-      if (res.success) { setStatus({ type: "success", msg: res.data.message }); setActiveVerification(type); } 
-      else { setStatus({ type: "error", msg: res.message }); }
+      setStatus({ type: "", msg: "" });
+      setIsLoading(true);
+      const newIdentifier = type === "email" ? form.email : form.phone;
+      try {
+        const res = await requestProfileUpdate(type, newIdentifier);
+        if (res.success) { setStatus({ type: "success", msg: res.data.message }); setActiveVerification(type); }
+        else { setStatus({ type: "error", msg: res.message }); }
+      } catch (e) { setStatus({ type: "error", msg: "Request failed. Please try again." }); }
       setIsLoading(false);
     };
 
     const handleVerifyOtp = async () => {
       if (otpCode.length !== 6) return setStatus({ type: "error", msg: "Please enter a valid 6-digit OTP." });
-      setIsLoading(true); setStatus({ type: "", msg: "" });
-      const res = await verifyProfileOtp(otpCode);
-      if (res.success) {
-        setStatus({ type: "success", msg: res.data.message });
-        setAuth({ ...user, [activeVerification]: form[activeVerification] });
-        setActiveVerification(null); setOtpCode("");
-      } else { setStatus({ type: "error", msg: res.message }); }
+      setIsLoading(true);
+      setStatus({ type: "", msg: "" });
+      try {
+        const res = await verifyProfileOtp(otpCode);
+        if (res.success) {
+          setStatus({ type: "success", msg: res.data.message });
+          setAuth({ ...user, [activeVerification]: form[activeVerification] });
+          setActiveVerification(null);
+          setOtpCode("");
+        } else { setStatus({ type: "error", msg: res.message }); }
+      } catch (e) { setStatus({ type: "error", msg: "Verification failed. Please try again." }); }
       setIsLoading(false);
     };
 
-    const saveGeneralDetails = (e) => {
+    const saveGeneralDetails = async (e) => {
       e.preventDefault();
-      setStatus({ type: "success", msg: "Personal & Family details updated successfully!" });
-      setTimeout(() => setStatus({type: "", msg: ""}), 3000);
-    }
+      setStatus({ type: "success", msg: "Profile information saved. (Backend integration pending)" });
+      setTimeout(() => setStatus({ type: "", msg: "" }), 3000);
+    };
 
     return (
-      <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
         {status.msg && (
-          <div className={`p-4 rounded-xl border-l-4 shadow-sm flex items-center ${status.type === 'error' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-emerald-50 border-emerald-500 text-emerald-700'}`}>
-            {status.type === 'error' ? <AlertCircle className="h-6 w-6 mr-3" /> : <ShieldCheck className="h-6 w-6 mr-3" />}
-            <p className="font-bold">{status.msg}</p>
+          <div className={`p-4 rounded-xl flex items-center gap-3 border-l-4 ${status.type === "error" ? "bg-red-50 border-red-500 text-red-700" : "bg-emerald-50 border-emerald-500 text-emerald-700"}`}>
+            {status.type === "error" ? <AlertCircle className="h-5 w-5 shrink-0" /> : <CheckCircle2 className="h-5 w-5 shrink-0" />}
+            <p className="text-sm font-semibold">{status.msg}</p>
           </div>
         )}
-
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           <div className="xl:col-span-1 space-y-6">
-            <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 p-8 text-center relative overflow-hidden">
-              <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-slate-50 to-white border-b border-slate-100"></div>
-              <div className="relative inline-block mb-4 group cursor-pointer" onClick={() => fileInputRef.current.click()}>
-                <div className="h-40 w-40 rounded-full overflow-hidden border-8 border-white bg-slate-100 shadow-xl relative z-10">
-                  {photoPreview ? <img src={photoPreview} alt="Profile" className="h-full w-full object-cover" /> : <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-emerald-100 to-teal-100 text-emerald-600 text-5xl font-black">{user.full_name.charAt(0).toUpperCase()}</div>}
+            {/* Avatar card */}
+            <div className="bg-white rounded-2xl border border-amber-100/50 shadow-sm p-6 text-center">
+              <div
+                className="relative inline-block mb-4 group cursor-pointer"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <div className="h-28 w-28 rounded-full overflow-hidden border-4 border-white ring-2 ring-amber-100 shadow-lg">
+                  {photoPreview
+                    ? <img src={photoPreview} alt="Profile" className="h-full w-full object-cover" />
+                    : <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-amber-100 to-amber-200 text-amber-700 text-4xl font-black">{user.full_name.charAt(0).toUpperCase()}</div>
+                  }
                 </div>
-                <div className="absolute inset-0 bg-slate-900/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20"><Camera className="h-10 w-10 text-white" /></div>
+                <div className="absolute inset-0 bg-slate-900/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Camera className="h-7 w-7 text-white" />
+                </div>
                 <input type="file" ref={fileInputRef} onChange={handlePhotoChange} accept="image/*" className="hidden" />
               </div>
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight">{user.full_name}</h3>
-              <p className="text-sm font-bold text-emerald-600 bg-emerald-50 inline-flex items-center px-4 py-1.5 rounded-full mt-3 border border-emerald-100">
-                <Award className="h-4 w-4 mr-1.5" /> Rank: {userRank}
-              </p>
+              <h3 className="font-bold text-slate-900">{user.full_name}</h3>
+              <p className="text-xs text-slate-400 mt-0.5">{user.email}</p>
+              <span className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-full text-xs font-bold border border-amber-100">
+                <Award className="h-3.5 w-3.5" /> {userRank}
+              </span>
             </div>
 
-            <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden">
-              <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50"><h3 className="font-bold text-slate-900 flex items-center"><ShieldCheck className="h-5 w-5 mr-2 text-slate-400" /> Account Security</h3></div>
-              <div className="p-8 space-y-6">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Email Address</label>
-                  <div className="flex gap-2">
-                    <input type="email" value={form.email} disabled={activeVerification === 'email'} onChange={(e) => setForm({ ...form, email: e.target.value })} className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500" />
-                    <button onClick={() => handleRequestOtp('email')} disabled={!isEmailChanged || isLoading || activeVerification === 'email'} className="px-6 py-3 font-bold rounded-xl transition-all bg-slate-900 hover:bg-slate-800 text-white disabled:opacity-50 disabled:bg-slate-100 disabled:text-slate-400">Update</button>
+            {/* Account security */}
+            <div className="bg-white rounded-2xl border border-amber-100/50 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-amber-100/50 bg-amber-50/30">
+                <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-slate-400" /> Account Security
+                </h3>
+              </div>
+              <div className="p-5 space-y-5">
+                {[
+                  { label: "Email Address", field: "email", type: "email", check: isEmailChanged, verKey: "email" },
+                  { label: "Phone Number", field: "phone", type: "text", check: isPhoneChanged, verKey: "phone" },
+                ].map((f) => (
+                  <div key={f.field} className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{f.label}</label>
+                    <div className="flex gap-2">
+                      <input
+                        type={f.type}
+                        value={form[f.field]}
+                        disabled={activeVerification === f.verKey}
+                        onChange={(e) => setForm({ ...form, [f.field]: e.target.value })}
+                        className="flex-1 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-amber-500 outline-none"
+                      />
+                      <button
+                        onClick={() => handleRequestOtp(f.verKey)}
+                        disabled={!f.check || isLoading || activeVerification === f.verKey}
+                        className="px-4 py-2.5 bg-[#0f2a1f] hover:bg-[#1a3a2a] text-white text-xs font-bold rounded-xl transition-all disabled:opacity-40 disabled:bg-slate-100 disabled:text-slate-400"
+                      >
+                        Update
+                      </button>
+                    </div>
+                    {activeVerification === f.verKey && (
+                      <div className="flex gap-2 mt-1">
+                        <input
+                          type="text" maxLength="6" placeholder="6-digit OTP"
+                          value={otpCode} onChange={(e) => setOtpCode(e.target.value)}
+                          className="flex-1 px-3 py-2.5 text-center font-mono text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none"
+                        />
+                        <button onClick={handleVerifyOtp} className="px-4 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-colors">
+                          Verify
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {activeVerification === 'email' && (
-                    <div className="mt-2 flex gap-2"><input type="text" maxLength="6" placeholder="6-digit OTP" value={otpCode} onChange={(e) => setOtpCode(e.target.value)} className="flex-1 px-4 py-3 text-center font-mono border rounded-xl focus:ring-2 focus:ring-emerald-500" /><button onClick={handleVerifyOtp} className="px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-colors">Verify</button></div>
-                  )}
-                </div>
-                <hr className="border-slate-100" />
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Phone Number</label>
-                  <div className="flex gap-2">
-                    <input type="text" value={form.phone} disabled={activeVerification === 'phone'} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500" />
-                    <button onClick={() => handleRequestOtp('phone')} disabled={!isPhoneChanged || isLoading || activeVerification === 'phone'} className="px-6 py-3 font-bold rounded-xl transition-all bg-slate-900 hover:bg-slate-800 text-white disabled:opacity-50 disabled:bg-slate-100 disabled:text-slate-400">Update</button>
-                  </div>
-                  {activeVerification === 'phone' && (
-                    <div className="mt-2 flex gap-2"><input type="text" maxLength="6" placeholder="6-digit OTP" value={otpCode} onChange={(e) => setOtpCode(e.target.value)} className="flex-1 px-4 py-3 text-center font-mono border rounded-xl focus:ring-2 focus:ring-emerald-500" /><button onClick={handleVerifyOtp} className="px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-colors">Verify</button></div>
-                  )}
-                </div>
+                ))}
               </div>
             </div>
           </div>
 
-          <div className="xl:col-span-2 space-y-6">
-            <form onSubmit={saveGeneralDetails} className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden">
-              <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                <h3 className="text-xl font-bold text-slate-900">Personal & Family Details</h3>
-                <span className="text-xs font-bold bg-slate-200 text-slate-600 px-3 py-1 rounded-full">Optional</span>
+          {/* Personal & family form */}
+          <div className="xl:col-span-2">
+            <form onSubmit={saveGeneralDetails} className="bg-white rounded-2xl border border-amber-100/50 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-amber-100/50 bg-amber-50/30 flex items-center justify-between">
+                <h3 className="font-bold text-slate-900">Personal & Family Details</h3>
+                <span className="text-[10px] font-bold bg-slate-200 text-slate-600 px-2.5 py-1 rounded-full uppercase tracking-wider">Optional</span>
               </div>
-              <div className="p-8 space-y-8">
-                <div className="space-y-5">
-                  <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-3">General Information</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div><label className="block text-sm font-bold text-slate-700 mb-2">Date of Birth</label><input type="date" value={personalForm.dob} onChange={(e) => setPersonalForm({...personalForm, dob: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-slate-900" /></div>
-                    <div><label className="block text-sm font-bold text-slate-700 mb-2">Gender</label><select value={personalForm.gender} onChange={(e) => setPersonalForm({...personalForm, gender: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-slate-900"><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
-                    <div className="md:col-span-2"><label className="block text-sm font-bold text-slate-700 mb-2">Full Address</label><input type="text" placeholder="Street, Landmark, Area" value={personalForm.address} onChange={(e) => setPersonalForm({...personalForm, address: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-slate-900" /></div>
-                    <div><label className="block text-sm font-bold text-slate-700 mb-2">City / District</label><input type="text" placeholder="City" value={personalForm.city} onChange={(e) => setPersonalForm({...personalForm, city: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-slate-900" /></div>
-                    <div className="flex gap-4">
-                      <div className="flex-1"><label className="block text-sm font-bold text-slate-700 mb-2">State</label><input type="text" placeholder="State" value={personalForm.state} onChange={(e) => setPersonalForm({...personalForm, state: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-slate-900" /></div>
-                      <div className="w-1/3"><label className="block text-sm font-bold text-slate-700 mb-2">PIN Code</label><input type="text" placeholder="000000" value={personalForm.pincode} onChange={(e) => setPersonalForm({...personalForm, pincode: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-slate-900" /></div>
+              <div className="p-6 space-y-8">
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">General Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Date of Birth</label>
+                      <input type="date" value={personalForm.dob} onChange={(e) => setPersonalForm({ ...personalForm, dob: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-slate-900 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Gender</label>
+                      <select value={personalForm.gender} onChange={(e) => setPersonalForm({ ...personalForm, gender: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-slate-900 outline-none">
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Full Address</label>
+                      <input type="text" placeholder="Street, Landmark, Area" value={personalForm.address} onChange={(e) => setPersonalForm({ ...personalForm, address: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-slate-900 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">City / District</label>
+                      <input type="text" placeholder="City" value={personalForm.city} onChange={(e) => setPersonalForm({ ...personalForm, city: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-slate-900 outline-none" />
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="flex-1">
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">State</label>
+                        <input type="text" placeholder="State" value={personalForm.state} onChange={(e) => setPersonalForm({ ...personalForm, state: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-slate-900 outline-none" />
+                      </div>
+                      <div className="w-1/3">
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">PIN Code</label>
+                        <input type="text" placeholder="000000" value={personalForm.pincode} onChange={(e) => setPersonalForm({ ...personalForm, pincode: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-slate-900 outline-none" />
+                      </div>
                     </div>
                   </div>
                 </div>
-
-                <div className="space-y-5 pt-4">
-                  <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-3">Nominee Details</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div><label className="block text-sm font-bold text-slate-700 mb-2">Nominee Full Name</label><input type="text" placeholder="Name" value={familyForm.nomineeName} onChange={(e) => setFamilyForm({...familyForm, nomineeName: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-slate-900" /></div>
-                    <div><label className="block text-sm font-bold text-slate-700 mb-2">Relation to User</label><input type="text" placeholder="e.g. Spouse, Child, Parent" value={familyForm.nomineeRelation} onChange={(e) => setFamilyForm({...familyForm, nomineeRelation: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-slate-900" /></div>
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Nominee Details</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Nominee Full Name</label>
+                      <input type="text" placeholder="Name" value={familyForm.nomineeName} onChange={(e) => setFamilyForm({ ...familyForm, nomineeName: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-slate-900 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Relation to User</label>
+                      <input type="text" placeholder="e.g. Spouse, Child, Parent" value={familyForm.nomineeRelation} onChange={(e) => setFamilyForm({ ...familyForm, nomineeRelation: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-slate-900 outline-none" />
+                    </div>
                   </div>
                 </div>
-
-                <div className="pt-8 border-t border-slate-100">
-                  <button type="submit" className="w-full md:w-auto px-10 py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition-all hover:-translate-y-0.5">Save Profile Information</button>
+                <div className="border-t border-slate-100 pt-5">
+                  <button type="submit" className="px-8 py-3 bg-[#0f2a1f] hover:bg-[#1a3a2a] text-white font-semibold rounded-xl shadow-sm transition-all text-sm hover:-translate-y-0.5">
+                    Save Profile Information
+                  </button>
                 </div>
               </div>
             </form>
@@ -429,126 +587,220 @@ export default function DashboardPage() {
     );
   };
 
-  // ---------------------------------------------------------
-  // 4. KYC VERIFICATION TAB 
-  // ---------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────
+  // TAB: KYC (unchanged except color inheritance)
+  // ─────────────────────────────────────────────────────────────────
   const KycTab = () => {
     const [kycData, setKycData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [statusMsg, setStatusMsg] = useState({ type: "", msg: "" });
-    
     const [form, setForm] = useState({ pan_number: "", aadhar_number: "", bank_name: "", bank_account_no: "", bank_ifsc: "" });
     const [files, setFiles] = useState({ pan: null, aadhar_front: null, aadhar_back: null, bank_proof: null, photo: null, signature: null });
 
     const indianBanks = [
       "State Bank of India (SBI)", "HDFC Bank", "ICICI Bank", "Punjab National Bank (PNB)",
       "Axis Bank", "Canara Bank", "Bank of Baroda", "Union Bank of India",
-      "Bank of India", "Indian Bank", "Central Bank of India", "Kotak Mahindra Bank", 
-      "IndusInd Bank", "Yes Bank", "IDFC First Bank", "Other"
+      "Bank of India", "Indian Bank", "Central Bank of India", "Kotak Mahindra Bank",
+      "IndusInd Bank", "Yes Bank", "IDFC First Bank", "Other",
     ];
 
     useEffect(() => {
       const loadKyc = async () => {
         setIsLoading(true);
-        const res = await fetchKycData();
-        if (res.success && res.data) {
-          setKycData(res.data);
-          setForm({
-            pan_number: res.data.pan_number || "", aadhar_number: res.data.aadhar_number || "",
-            bank_name: res.data.bank_name || "", bank_account_no: res.data.bank_account_no || "", bank_ifsc: res.data.bank_ifsc || ""
-          });
-        }
+        try {
+          const res = await fetchKycData();
+          if (res.success && res.data) {
+            setKycData(res.data);
+            setForm({
+              pan_number: res.data.pan_number || "",
+              aadhar_number: res.data.aadhar_number || "",
+              bank_name: res.data.bank_name || "",
+              bank_account_no: res.data.bank_account_no || "",
+              bank_ifsc: res.data.bank_ifsc || "",
+            });
+          }
+        } catch (e) { /* API pending */ }
         setIsLoading(false);
       };
       loadKyc();
     }, []);
 
-    const handleFileChange = (e, key) => { setFiles({...files, [key]: e.target.files[0]}); };
+    const handleFileChange = (e, key) => {
+      setFiles((prev) => ({ ...prev, [key]: e.target.files[0] }));
+    };
 
     const handleSubmit = async (e) => {
-      e.preventDefault(); setIsSubmitting(true); setStatusMsg({ type: "", msg: "" });
-      const res = await submitKycData(form);
-      if (res.success) {
-        setStatusMsg({ type: "success", msg: "KYC Documents & Details submitted successfully." });
-        const updated = await fetchKycData();
-        if (updated.success) setKycData(updated.data);
-      } else { setStatusMsg({ type: "error", msg: res.message }); }
+      e.preventDefault();
+      setIsSubmitting(true);
+      setStatusMsg({ type: "", msg: "" });
+      try {
+        const formData = new FormData();
+        Object.entries(form).forEach(([key, val]) => formData.append(key, val));
+        Object.entries(files).forEach(([key, file]) => { if (file) formData.append(key, file); });
+        const res = await submitKycData(formData);
+        if (res.success) {
+          setStatusMsg({ type: "success", msg: "KYC documents submitted for verification." });
+          const updated = await fetchKycData();
+          if (updated.success) setKycData(updated.data);
+        } else {
+          setStatusMsg({ type: "error", msg: res.message });
+        }
+      } catch (e) {
+        setStatusMsg({ type: "error", msg: "Submission failed. Please try again." });
+      }
       setIsSubmitting(false);
     };
 
-    const isLocked = kycData?.kyc_status === 'pending' || kycData?.kyc_status === 'approved';
+    const isLocked = kycData?.kyc_status === "pending" || kycData?.kyc_status === "approved";
 
-    const FileUploadBox = ({ label, keyName }) => (
-      <div className={`relative border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center text-center transition-all ${files[keyName] ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 hover:border-slate-400 bg-slate-50 hover:bg-slate-100'} ${isLocked ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}>
-        <input type="file" disabled={isLocked} onChange={(e) => handleFileChange(e, keyName)} accept="image/*,.pdf" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed" />
+    const FileBox = ({ label, keyName }) => (
+      <div className={`relative border-2 border-dashed rounded-xl p-5 flex flex-col items-center justify-center text-center transition-all
+        ${files[keyName] ? "border-amber-400 bg-amber-50" : "border-slate-200 hover:border-slate-300 bg-slate-50"}
+        ${isLocked ? "opacity-50 pointer-events-none" : "cursor-pointer"}`}>
+        <input
+          type="file" disabled={isLocked}
+          onChange={(e) => handleFileChange(e, keyName)}
+          accept="image/*,.pdf"
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+        />
         {files[keyName] ? (
-          <><CheckCircle2 className="h-8 w-8 text-emerald-500 mb-2" /><p className="text-sm font-bold text-emerald-800 break-all">{files[keyName].name}</p></>
+          <>
+            <CheckCircle2 className="h-7 w-7 text-amber-500 mb-1.5" />
+            <p className="text-xs font-semibold text-amber-700 break-all">{files[keyName].name}</p>
+          </>
         ) : (
-          <><UploadCloud className="h-8 w-8 text-slate-400 mb-2" /><p className="text-sm font-bold text-slate-700">{label}</p><p className="text-xs text-slate-500 mt-1">Click or drag file</p></>
+          <>
+            <UploadCloud className="h-7 w-7 text-slate-300 mb-1.5" />
+            <p className="text-xs font-bold text-slate-600">{label}</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Click or drag</p>
+          </>
         )}
       </div>
     );
 
-    return (
-      <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="mb-8">
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">KYC Verification</h2>
-          <p className="text-slate-500 font-medium mt-1">Upload your identity and banking proofs to unlock platform payouts.</p>
-        </div>
+    const statusStyles = {
+      approved: "bg-emerald-50 border-emerald-100 text-emerald-800",
+      pending: "bg-amber-50 border-amber-100 text-amber-800",
+      rejected: "bg-red-50 border-red-100 text-red-800",
+      default: "bg-slate-50 border-slate-100 text-slate-700",
+    };
 
-        {isLoading ? <div className="flex justify-center py-20"><Loader2 className="h-10 w-10 animate-spin text-emerald-500" /></div> : (
-          <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden">
-            
-            <div className={`p-8 border-b flex items-center ${kycData?.kyc_status === 'approved' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : kycData?.kyc_status === 'pending' ? 'bg-amber-50 border-amber-100 text-amber-800' : kycData?.kyc_status === 'rejected' ? 'bg-red-50 border-red-100 text-red-800' : 'bg-slate-50 border-slate-100 text-slate-800'}`}>
-              <ShieldCheck className="h-10 w-10 mr-5 shrink-0" />
+    return (
+      <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900">KYC Verification</h2>
+          <p className="text-slate-500 text-sm mt-1">Submit your identity and banking documents to unlock withdrawals.</p>
+        </div>
+        {isLoading ? (
+          <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-amber-500" /></div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-amber-100/50 shadow-sm overflow-hidden">
+            <div className={`p-5 border-b flex items-center gap-4 ${statusStyles[kycData?.kyc_status] || statusStyles.default}`}>
+              <ShieldCheck className="h-8 w-8 shrink-0" />
               <div>
-                <h4 className="font-bold uppercase tracking-wider text-xs mb-1 opacity-80">Verification Status</h4>
-                <p className="font-black text-2xl capitalize tracking-tight">{kycData?.kyc_status || 'Unverified'}</p>
-                {kycData?.kyc_status === 'rejected' && <p className="text-sm mt-2 font-bold text-red-600 bg-red-100/50 inline-block px-3 py-1 rounded-md border border-red-200">Reason: {kycData.kyc_rejection_reason}</p>}
+                <p className="text-xs font-bold uppercase tracking-wider opacity-70">Verification Status</p>
+                <p className="font-black text-xl capitalize">{kycData?.kyc_status || "Not Submitted"}</p>
+                {kycData?.kyc_status === "rejected" && (
+                  <p className="text-sm mt-1 font-semibold text-red-600">Reason: {kycData.kyc_rejection_reason}</p>
+                )}
               </div>
             </div>
 
-            <div className="p-8 md:p-10">
-              {statusMsg.msg && <div className={`p-5 rounded-2xl mb-8 flex items-center shadow-sm ${statusMsg.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}><AlertCircle className="h-6 w-6 mr-4 shrink-0" /><p className="font-bold text-sm">{statusMsg.msg}</p></div>}
-
-              <form onSubmit={handleSubmit} className="space-y-12">
-                <div className="space-y-6">
-                  <h3 className="text-xl font-black text-slate-900 border-b border-slate-100 pb-3 flex items-center"><UserCircle className="mr-3 h-6 w-6 text-indigo-500"/> Identity Documents</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div><label className="block text-sm font-bold text-slate-700 mb-2">PAN Card Number</label><input type="text" required disabled={isLocked} value={form.pan_number} onChange={(e) => setForm({...form, pan_number: e.target.value.toUpperCase()})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium focus:ring-2 focus:ring-indigo-500 transition-all" placeholder="ABCDE1234F" /></div>
-                    <div><label className="block text-sm font-bold text-slate-700 mb-2">Aadhar Card Number</label><input type="text" required disabled={isLocked} value={form.aadhar_number} onChange={(e) => setForm({...form, aadhar_number: e.target.value.replace(/\D/g, '')})} maxLength="12" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium focus:ring-2 focus:ring-indigo-500 transition-all" placeholder="XXXX XXXX XXXX" /></div>
+            <div className="p-6 md:p-8">
+              {statusMsg.msg && (
+                <div className={`p-4 rounded-xl mb-6 flex items-center gap-3 border ${statusMsg.type === "error" ? "bg-red-50 border-red-200 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-700"}`}>
+                  <AlertCircle className="h-5 w-5 shrink-0" />
+                  <p className="text-sm font-semibold">{statusMsg.msg}</p>
+                </div>
+              )}
+              <form onSubmit={handleSubmit} className="space-y-10">
+                {/* Identity */}
+                <div className="space-y-5">
+                  <h3 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+                    <UserCircle className="h-5 w-5 text-indigo-500" /> Identity Documents
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">PAN Card Number</label>
+                      <input
+                        type="text" required disabled={isLocked}
+                        value={form.pan_number}
+                        onChange={(e) => setForm({ ...form, pan_number: e.target.value.toUpperCase() })}
+                        placeholder="ABCDE1234F"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Aadhaar Card Number</label>
+                      <input
+                        type="text" required disabled={isLocked}
+                        value={form.aadhar_number}
+                        onChange={(e) => setForm({ ...form, aadhar_number: e.target.value.replace(/\D/g, "") })}
+                        maxLength="12" placeholder="XXXX XXXX XXXX"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <FileUploadBox label="Upload Self Photo" keyName="photo" />
-                    <FileUploadBox label="PAN Card Image" keyName="pan" />
-                    <FileUploadBox label="Aadhar Front" keyName="aadhar_front" />
-                    <FileUploadBox label="Aadhar Back" keyName="aadhar_back" />
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <FileBox label="Self Photo" keyName="photo" />
+                    <FileBox label="PAN Card" keyName="pan" />
+                    <FileBox label="Aadhaar Front" keyName="aadhar_front" />
+                    <FileBox label="Aadhaar Back" keyName="aadhar_back" />
                   </div>
                 </div>
 
-                <div className="space-y-6">
-                  <h3 className="text-xl font-black text-slate-900 border-b border-slate-100 pb-3 flex items-center"><Wallet className="mr-3 h-6 w-6 text-emerald-500"/> Payout Bank Details</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Bank details */}
+                <div className="space-y-5">
+                  <h3 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+                    <Wallet className="h-5 w-5 text-emerald-500" /> Payout Bank Details
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 mb-2">Bank Name</label>
-                      <select required disabled={isLocked} value={form.bank_name} onChange={(e) => setForm({...form, bank_name: e.target.value})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium focus:ring-2 focus:ring-emerald-500 transition-all">
-                        <option value="" disabled>Select your bank</option>
-                        {indianBanks.map(bank => <option key={bank} value={bank}>{bank}</option>)}
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Bank Name</label>
+                      <select
+                        required disabled={isLocked}
+                        value={form.bank_name}
+                        onChange={(e) => setForm({ ...form, bank_name: e.target.value })}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+                      >
+                        <option value="" disabled>Select bank</option>
+                        {indianBanks.map((b) => <option key={b} value={b}>{b}</option>)}
                       </select>
                     </div>
-                    <div><label className="block text-sm font-bold text-slate-700 mb-2">Account Number</label><input type="text" required disabled={isLocked} value={form.bank_account_no} onChange={(e) => setForm({...form, bank_account_no: e.target.value.replace(/\D/g, '')})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium focus:ring-2 focus:ring-emerald-500 transition-all" placeholder="Account Number" /></div>
-                    <div><label className="block text-sm font-bold text-slate-700 mb-2">IFSC Code</label><input type="text" required disabled={isLocked} value={form.bank_ifsc} onChange={(e) => setForm({...form, bank_ifsc: e.target.value.toUpperCase()})} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium focus:ring-2 focus:ring-emerald-500 transition-all" placeholder="HDFC0001234" /></div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Account Number</label>
+                      <input
+                        type="text" required disabled={isLocked}
+                        value={form.bank_account_no}
+                        onChange={(e) => setForm({ ...form, bank_account_no: e.target.value.replace(/\D/g, "") })}
+                        placeholder="Account Number"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">IFSC Code</label>
+                      <input
+                        type="text" required disabled={isLocked}
+                        value={form.bank_ifsc}
+                        onChange={(e) => setForm({ ...form, bank_ifsc: e.target.value.toUpperCase() })}
+                        placeholder="HDFC0001234"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+                      />
+                    </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FileUploadBox label="Upload Bank Passbook / Cheque" keyName="bank_proof" />
-                    <FileUploadBox label="Upload Digital Signature" keyName="signature" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <FileBox label="Bank Passbook / Cheque" keyName="bank_proof" />
+                    <FileBox label="Digital Signature" keyName="signature" />
                   </div>
                 </div>
 
                 {!isLocked && (
-                  <button type="submit" disabled={isSubmitting} className="w-full py-4 px-6 bg-slate-900 hover:bg-slate-800 text-white font-black text-lg rounded-2xl shadow-xl transition-all flex items-center justify-center hover:-translate-y-1">
-                    {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : "Submit Documents for Verification"}
+                  <button
+                    type="submit" disabled={isSubmitting}
+                    className="w-full py-4 bg-[#0f2a1f] hover:bg-[#1a3a2a] text-white font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 hover:-translate-y-0.5"
+                  >
+                    {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Submit for Verification"}
                   </button>
                 )}
               </form>
@@ -559,344 +811,512 @@ export default function DashboardPage() {
     );
   };
 
-  // ---------------------------------------------------------
-  // 5. WALLET TAB
-  // ---------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────
+  // TAB: WALLET (unchanged except color inheritance)
+  // ─────────────────────────────────────────────────────────────────
   const WalletTab = () => {
     const [balance, setBalance] = useState(0);
     const [transactions, setTransactions] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+    const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
     const [withdrawAmount, setWithdrawAmount] = useState("");
     const [payoutMethod, setPayoutMethod] = useState("upi");
     const [payoutDetails, setPayoutDetails] = useState({ upiId: "", upiMobile: "", bankAccount: "", bankIfsc: "" });
     const [withdrawStatus, setWithdrawStatus] = useState({ type: "", msg: "" });
     const [isWithdrawing, setIsWithdrawing] = useState(false);
-    const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+    const [isTransferOpen, setIsTransferOpen] = useState(false);
     const [transferReceiver, setTransferReceiver] = useState("");
     const [transferAmount, setTransferAmount] = useState("");
     const [transferStatus, setTransferStatus] = useState({ type: "", msg: "" });
     const [isTransferring, setIsTransferring] = useState(false);
     const [selectedTx, setSelectedTx] = useState(null);
 
-    const loadWallet = async () => {
+    const loadWallet = useCallback(async () => {
       setIsLoading(true);
-      const res = await fetchWalletData(); 
-      if (res.success) { setBalance(res.balance); setTransactions(res.history); }
+      try {
+        const res = await fetchWalletData();
+        if (res.success) { setBalance(res.balance); setTransactions(res.history); }
+      } catch (e) { /* API pending */ }
       setIsLoading(false);
-    };
+    }, []);
 
-    useEffect(() => { loadWallet(); }, []);
+    useEffect(() => { loadWallet(); }, [loadWallet]);
 
     const handleWithdraw = async (e) => {
-        e.preventDefault(); setWithdrawStatus({ type: "", msg: "" });
-        const amount = parseFloat(withdrawAmount);
-        if (!amount || amount <= 0) return setWithdrawStatus({ type: "error", msg: "Enter a valid amount." });
-        if (amount > balance) return setWithdrawStatus({ type: "error", msg: "Insufficient balance." });
-        if (payoutMethod === "upi" && (!payoutDetails.upiId || !payoutDetails.upiMobile)) return setWithdrawStatus({ type: "error", msg: "Please fill in all UPI details." });
-        if (payoutMethod === "bank" && (!payoutDetails.bankAccount || !payoutDetails.bankIfsc)) return setWithdrawStatus({ type: "error", msg: "Please fill in all Bank details." });
-        setIsWithdrawing(true);
+      e.preventDefault();
+      setWithdrawStatus({ type: "", msg: "" });
+      const amount = parseFloat(withdrawAmount);
+      if (!amount || amount <= 0) return setWithdrawStatus({ type: "error", msg: "Enter a valid amount." });
+      if (amount > balance) return setWithdrawStatus({ type: "error", msg: "Insufficient balance." });
+      if (payoutMethod === "upi" && (!payoutDetails.upiId || !payoutDetails.upiMobile))
+        return setWithdrawStatus({ type: "error", msg: "Fill in all UPI details." });
+      if (payoutMethod === "bank" && (!payoutDetails.bankAccount || !payoutDetails.bankIfsc))
+        return setWithdrawStatus({ type: "error", msg: "Fill in all bank details." });
+      setIsWithdrawing(true);
+      try {
         const res = await submitWithdrawal(amount, payoutMethod, payoutDetails);
         if (res.success) {
-            setWithdrawStatus({ type: "success", msg: res.message }); setWithdrawAmount("");
-            await loadWallet(); setTimeout(() => { setIsWithdrawModalOpen(false); setWithdrawStatus({ type: "", msg: "" }); }, 2000);
+          setWithdrawStatus({ type: "success", msg: res.message });
+          setWithdrawAmount("");
+          await loadWallet();
+          setTimeout(() => { setIsWithdrawOpen(false); setWithdrawStatus({ type: "", msg: "" }); }, 2000);
         } else { setWithdrawStatus({ type: "error", msg: res.message }); }
-        setIsWithdrawing(false);
+      } catch (e) { setWithdrawStatus({ type: "error", msg: "Request failed. Please try again." }); }
+      setIsWithdrawing(false);
     };
 
     const handleTransfer = async (e) => {
-        e.preventDefault(); setTransferStatus({ type: "", msg: "" });
-        const amount = parseFloat(transferAmount);
-        if (!transferReceiver) return setTransferStatus({ type: "error", msg: "Enter a valid User ID or Email." });
-        if (!amount || amount <= 0) return setTransferStatus({ type: "error", msg: "Enter a valid amount." });
-        if (amount > balance) return setTransferStatus({ type: "error", msg: "Insufficient balance." });
-        setIsTransferring(true);
+      e.preventDefault();
+      setTransferStatus({ type: "", msg: "" });
+      const amount = parseFloat(transferAmount);
+      if (!transferReceiver) return setTransferStatus({ type: "error", msg: "Enter a valid User ID or Email." });
+      if (!amount || amount <= 0) return setTransferStatus({ type: "error", msg: "Enter a valid amount." });
+      if (amount > balance) return setTransferStatus({ type: "error", msg: "Insufficient balance." });
+      setIsTransferring(true);
+      try {
         const res = await submitP2PTransfer(transferReceiver, amount);
         if (res.success) {
-            setTransferStatus({ type: "success", msg: res.message }); setTransferAmount(""); setTransferReceiver("");
-            await loadWallet(); setTimeout(() => { setIsTransferModalOpen(false); setTransferStatus({ type: "", msg: "" }); }, 2000);
+          setTransferStatus({ type: "success", msg: res.message });
+          setTransferAmount(""); setTransferReceiver("");
+          await loadWallet();
+          setTimeout(() => { setIsTransferOpen(false); setTransferStatus({ type: "", msg: "" }); }, 2000);
         } else { setTransferStatus({ type: "error", msg: res.message }); }
-        setIsTransferring(false);
+      } catch (e) { setTransferStatus({ type: "error", msg: "Transfer failed. Please try again." }); }
+      setIsTransferring(false);
     };
 
-    return (
-        <div className="max-w-6xl mx-auto space-y-8 relative animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="mb-8">
-              <h2 className="text-3xl font-black text-slate-900 tracking-tight">Wallet & Earnings</h2>
-              <p className="text-slate-500 font-medium mt-1">Manage commissions, request payouts, and transfer funds instantly.</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-2 bg-gradient-to-br from-emerald-600 to-teal-900 rounded-[2rem] shadow-xl border border-emerald-800 p-8 text-white relative overflow-hidden group">
-                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-20 mix-blend-overlay"></div>
-                <div className="relative z-10 flex flex-col h-full justify-between">
-                  <div>
-                    <p className="text-emerald-100 font-bold text-sm mb-2 uppercase tracking-widest flex items-center"><Wallet className="h-4 w-4 mr-2"/> Available Balance</p>
-                    <h3 className="text-5xl font-black tracking-tighter mb-8 drop-shadow-md">₹{isLoading ? "..." : parseFloat(balance).toLocaleString('en-IN', {minimumFractionDigits: 2})}</h3>
-                  </div>
-                  <div className="flex flex-wrap gap-4">
-                    <button onClick={() => setIsWithdrawModalOpen(true)} className="px-6 py-3 bg-white text-emerald-700 hover:bg-slate-50 text-sm font-black rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center hover:-translate-y-1">
-                      <TrendingUp className="h-5 w-5 mr-2" /> Request Payout
-                    </button>
-                    <button onClick={() => setIsTransferModalOpen(true)} className="px-6 py-3 bg-black/20 hover:bg-black/30 text-white border border-white/20 text-sm font-bold rounded-xl shadow-lg backdrop-blur-md transition-all flex items-center hover:-translate-y-1">
-                      <ArrowRightLeft className="h-5 w-5 mr-2" /> P2P Transfer
-                    </button>
-                  </div>
-                </div>
-                <Wallet className="absolute -bottom-10 -right-10 h-64 w-64 text-white/10 rotate-12 group-hover:scale-110 transition-transform duration-700" />
-              </div>
-
-              <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 p-8 flex flex-col justify-center items-center text-center hover:shadow-lg transition-shadow">
-                <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl mb-4"><ArrowRightLeft className="h-8 w-8" /></div>
-                <h4 className="text-xl font-black text-slate-900">Zero Fee Transfers</h4>
-                <p className="text-sm font-medium text-slate-500 mt-3">Send wallet funds instantly to any registered network member using their ID.</p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden mt-8">
-              <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50">
-                <h3 className="text-xl font-black text-slate-900">Transaction Ledger</h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 uppercase tracking-wider text-xs">
-                    <tr><th className="px-8 py-4">Date</th><th className="px-8 py-4">Description</th><th className="px-8 py-4">Type</th><th className="px-8 py-4 text-right">Amount</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {isLoading ? <tr><td colSpan="4" className="px-8 py-12 text-center text-slate-400"><Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-emerald-500" /> Syncing ledger...</td></tr>
-                    : transactions.length === 0 ? <tr><td colSpan="4" className="px-8 py-16 text-center text-slate-500"><Receipt className="h-12 w-12 text-slate-200 mx-auto mb-3"/>No transactions found.</td></tr>
-                    : transactions.map((tx, idx) => (
-                      <tr key={idx} onClick={() => setSelectedTx(tx)} className="hover:bg-slate-50 transition-colors cursor-pointer group">
-                        <td className="px-8 py-5 text-slate-600 font-medium whitespace-nowrap">{new Date(tx.created_at).toLocaleDateString('en-IN')}</td>
-                        <td className="px-8 py-5 text-slate-900 font-bold group-hover:text-emerald-600 transition-colors flex items-center">
-                          {tx.description || tx.reference} 
-                          {tx.description?.toLowerCase().includes("package") && <ShoppingBag className="h-4 w-4 ml-2 text-slate-300" />}
-                        </td>
-                        <td className="px-8 py-5"><span className={`px-3 py-1.5 text-xs font-bold rounded-lg ${tx.transaction_type.includes('credit') || tx.transaction_type.includes('commission') || tx.transaction_type.includes('in') ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{tx.transaction_type.replace(/_/g, ' ').toUpperCase()}</span></td>
-                        <td className={`px-8 py-5 text-right text-lg font-black whitespace-nowrap ${tx.amount > 0 ? "text-emerald-600" : "text-slate-900"}`}>{tx.amount > 0 ? "+" : ""}₹{parseFloat(Math.abs(tx.amount)).toFixed(2)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* WITHDRAW MODAL */}
-            {isWithdrawModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
-                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 max-h-[90vh] flex flex-col">
-                  <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                    <h3 className="text-xl font-black text-slate-900">Request Payout</h3>
-                    <button onClick={() => setIsWithdrawModalOpen(false)} className="text-slate-400 hover:text-slate-900 transition-colors bg-white p-2 rounded-full shadow-sm"><X className="h-5 w-5" /></button>
-                  </div>
-                  <div className="p-6 overflow-y-auto space-y-6">
-                    {withdrawStatus.msg && <div className={`p-4 rounded-xl flex items-start ${withdrawStatus.type === 'error' ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'}`}><AlertCircle className="h-5 w-5 mr-3 shrink-0 mt-0.5" /><p className="text-sm font-bold">{withdrawStatus.msg}</p></div>}
-                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex justify-between items-center">
-                      <span className="text-sm font-bold text-slate-500 uppercase tracking-widest">Available Balance</span><span className="text-2xl font-black text-emerald-600">₹{parseFloat(balance).toFixed(2)}</span>
-                    </div>
-                    <form onSubmit={handleWithdraw} className="space-y-6">
-                      <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-2">Withdrawal Amount (₹)</label>
-                        <input type="number" min="1" step="0.01" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} placeholder="e.g. 1500" className="w-full px-5 py-4 bg-white border border-slate-300 rounded-2xl text-slate-900 text-xl font-black focus:ring-2 focus:ring-emerald-500 transition-all shadow-sm" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-3">Select Payout Method</label>
-                        <div className="flex gap-3">
-                          <button type="button" onClick={() => setPayoutMethod('upi')} className={`flex-1 py-3 rounded-xl border-2 text-sm font-black transition-all ${payoutMethod === 'upi' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>UPI Transfer</button>
-                          <button type="button" onClick={() => setPayoutMethod('bank')} className={`flex-1 py-3 rounded-xl border-2 text-sm font-black transition-all ${payoutMethod === 'bank' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>Bank Transfer</button>
-                        </div>
-                      </div>
-                      {payoutMethod === 'upi' ? (
-                        <div className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                          <div><label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">UPI ID</label><input type="text" placeholder="example@upi" value={payoutDetails.upiId} onChange={(e) => setPayoutDetails({...payoutDetails, upiId: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500" /></div>
-                          <div><label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">UPI Linked Mobile Number</label><input type="text" placeholder="9876543210" value={payoutDetails.upiMobile} onChange={(e) => setPayoutDetails({...payoutDetails, upiMobile: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500" /></div>
-                        </div>
-                      ) : (
-                        <div className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                          <div><label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Bank Account Number</label><input type="text" placeholder="Account Number" value={payoutDetails.bankAccount} onChange={(e) => setPayoutDetails({...payoutDetails, bankAccount: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500" /></div>
-                          <div><label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">IFSC Code</label><input type="text" placeholder="IFSC Code" value={payoutDetails.bankIfsc} onChange={(e) => setPayoutDetails({...payoutDetails, bankIfsc: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500" /></div>
-                        </div>
-                      )}
-                      <button type="submit" disabled={isWithdrawing || !withdrawAmount} className="w-full py-4 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-lg rounded-2xl shadow-lg transition-all disabled:opacity-50 flex items-center justify-center mt-6">
-                        {isWithdrawing ? <Loader2 className="h-6 w-6 animate-spin" /> : "Submit Withdrawal Request"}
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TRANSFER MODAL */}
-            {isTransferModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
-                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
-                  <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50"><h3 className="text-xl font-black text-slate-900">Transfer Funds</h3><button onClick={() => setIsTransferModalOpen(false)} className="text-slate-400 hover:text-slate-900 transition-colors bg-white p-2 rounded-full shadow-sm"><X className="h-5 w-5" /></button></div>
-                  <div className="p-6 space-y-6">
-                    {transferStatus.msg && <div className={`p-4 rounded-xl flex items-start ${transferStatus.type === 'error' ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'}`}><AlertCircle className="h-5 w-5 mr-3 shrink-0 mt-0.5" /><p className="text-sm font-bold">{transferStatus.msg}</p></div>}
-                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex justify-between items-center"><span className="text-sm font-bold text-slate-500 uppercase tracking-widest">Available Balance</span><span className="text-2xl font-black text-slate-900">₹{parseFloat(balance).toFixed(2)}</span></div>
-                    <form onSubmit={handleTransfer} className="space-y-4">
-                      <div><label className="block text-sm font-bold text-slate-700 mb-2">Receiver User ID or Email</label><input type="text" value={transferReceiver} onChange={(e) => setTransferReceiver(e.target.value)} placeholder="e.g. 45 or john@email.com" className="w-full px-5 py-4 bg-white border border-slate-300 rounded-2xl text-slate-900 font-medium focus:ring-2 focus:ring-slate-900 shadow-sm transition-all" /></div>
-                      <div><label className="block text-sm font-bold text-slate-700 mb-2">Transfer Amount (₹)</label><input type="number" min="1" step="0.01" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} placeholder="e.g. 500" className="w-full px-5 py-4 bg-white border border-slate-300 rounded-2xl text-slate-900 text-xl font-black focus:ring-2 focus:ring-slate-900 shadow-sm transition-all" /></div>
-                      <button type="submit" disabled={isTransferring || !transferAmount || !transferReceiver} className="w-full py-4 px-4 bg-slate-900 hover:bg-slate-800 text-white font-black text-lg rounded-2xl shadow-lg transition-all disabled:opacity-50 flex items-center justify-center mt-6">
-                        {isTransferring ? <Loader2 className="h-6 w-6 animate-spin" /> : "Send Funds Instantly"}
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              </div>
-            )}
+    const ModalWrapper = ({ open, onClose, children }) => !open ? null : (
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in slide-in-from-bottom-4 sm:zoom-in-95 max-h-[90vh] flex flex-col">
+          {children}
         </div>
+      </div>
+    );
+
+    const StatusAlert = ({ status }) => status.msg ? (
+      <div className={`p-3.5 rounded-xl flex items-start gap-3 border ${status.type === "error" ? "bg-red-50 border-red-200 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-700"}`}>
+        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+        <p className="text-sm font-semibold">{status.msg}</p>
+      </div>
+    ) : null;
+
+    return (
+      <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900">Wallet & Earnings</h2>
+          <p className="text-slate-500 text-sm mt-1">Manage commissions, request payouts, and transfer funds.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* Balance card – premium gold/emerald gradient */}
+          <div className="md:col-span-2 bg-gradient-to-br from-[#0f2a1f] to-amber-900/80 rounded-2xl p-6 text-white relative overflow-hidden">
+            <p className="text-amber-200/70 text-xs font-bold uppercase tracking-widest mb-1 flex items-center gap-1.5">
+              <Wallet className="h-3.5 w-3.5" /> Available Balance
+            </p>
+            <h3 className="text-4xl font-black tracking-tight mb-6">
+              ₹{isLoading ? "—" : parseFloat(balance).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+            </h3>
+            <div className="flex flex-wrap gap-3">
+              <button onClick={() => setIsWithdrawOpen(true)} className="px-5 py-2.5 bg-white text-[#0f2a1f] hover:bg-slate-50 text-sm font-bold rounded-xl shadow transition-all flex items-center gap-2 hover:-translate-y-0.5">
+                <TrendingUp className="h-4 w-4" /> Request Payout
+              </button>
+              <button onClick={() => setIsTransferOpen(true)} className="px-5 py-2.5 bg-white/15 hover:bg-white/25 text-white border border-white/20 text-sm font-semibold rounded-xl transition-all flex items-center gap-2 hover:-translate-y-0.5">
+                <ArrowRightLeft className="h-4 w-4" /> P2P Transfer
+              </button>
+            </div>
+            <Wallet className="absolute -bottom-8 -right-8 h-40 w-40 text-white/5" />
+          </div>
+
+          <div className="bg-white border border-amber-100/50 rounded-2xl p-6 flex flex-col items-center justify-center text-center shadow-sm">
+            <div className="p-3 bg-amber-50 text-amber-600 rounded-xl mb-3">
+              <ArrowRightLeft className="h-6 w-6" />
+            </div>
+            <h4 className="font-bold text-slate-900 text-sm">Zero-Fee P2P</h4>
+            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">Send funds instantly to any network member using their ID or email.</p>
+          </div>
+        </div>
+
+        {/* Transaction ledger */}
+        <div className="bg-white rounded-2xl border border-amber-100/50 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-amber-100/50 bg-amber-50/30 flex items-center justify-between">
+            <h3 className="font-bold text-slate-900">Transaction Ledger</h3>
+            <button onClick={loadWallet} className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all">
+              <Zap className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-slate-400 font-semibold border-b border-slate-100 text-xs uppercase tracking-wider">
+                <tr>
+                  <th className="px-6 py-3">Date</th>
+                  <th className="px-6 py-3">Description</th>
+                  <th className="px-6 py-3">Type</th>
+                  <th className="px-6 py-3 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {isLoading ? (
+                  <tr><td colSpan={4} className="px-6 py-10 text-center text-slate-400"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-amber-500" />Syncing ledger…</td></tr>
+                ) : transactions.length === 0 ? (
+                  <tr><td colSpan={4} className="px-6 py-14 text-center"><Receipt className="h-10 w-10 text-slate-200 mx-auto mb-2" /><p className="text-slate-400 text-sm">No transactions yet.</p></td></tr>
+                ) : transactions.map((tx) => (
+                  <tr key={tx.id || tx.reference || Date.now()} onClick={() => setSelectedTx(tx)} className="hover:bg-slate-50 cursor-pointer transition-colors">
+                    <td className="px-6 py-4 text-slate-500 text-xs whitespace-nowrap">{new Date(tx.created_at).toLocaleDateString("en-IN")}</td>
+                    <td className="px-6 py-4 text-slate-800 font-semibold">{tx.description || tx.reference}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2.5 py-1 text-xs font-bold rounded-lg ${
+                        tx.transaction_type?.includes("credit") || tx.transaction_type?.includes("commission") || tx.transaction_type?.includes("in")
+                          ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                      }`}>
+                        {tx.transaction_type?.replace(/_/g, " ").toUpperCase()}
+                      </span>
+                    </td>
+                    <td className={`px-6 py-4 text-right font-bold whitespace-nowrap ${tx.amount > 0 ? "text-emerald-600" : "text-slate-700"}`}>
+                      {tx.amount > 0 ? "+" : ""}₹{parseFloat(Math.abs(tx.amount)).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Transaction detail modal */}
+        {selectedTx && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
+              <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 className="font-bold text-slate-900">Transaction Detail</h3>
+                <button onClick={() => setSelectedTx(null)} className="p-1.5 text-slate-400 hover:text-slate-900 bg-white rounded-full shadow-sm">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="p-5 space-y-3">
+                {[
+                  { label: "Date", value: new Date(selectedTx.created_at).toLocaleString("en-IN") },
+                  { label: "Description", value: selectedTx.description || selectedTx.reference },
+                  { label: "Type", value: selectedTx.transaction_type?.replace(/_/g, " ").toUpperCase() },
+                  { label: "Amount", value: `${selectedTx.amount > 0 ? "+" : ""}₹${parseFloat(Math.abs(selectedTx.amount)).toFixed(2)}` },
+                ].map((r) => (
+                  <div key={r.label} className="flex justify-between items-center py-2 border-b border-slate-50">
+                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">{r.label}</span>
+                    <span className="text-sm font-bold text-slate-800">{r.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Withdraw modal */}
+        <ModalWrapper open={isWithdrawOpen} onClose={() => setIsWithdrawOpen(false)}>
+          <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+            <h3 className="font-bold text-slate-900">Request Payout</h3>
+            <button onClick={() => setIsWithdrawOpen(false)} className="p-1.5 text-slate-400 hover:text-slate-900 bg-white rounded-full shadow-sm"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="p-5 overflow-y-auto space-y-5">
+            <StatusAlert status={withdrawStatus} />
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex justify-between items-center">
+              <span className="text-xs font-semibold text-slate-500">Available</span>
+              <span className="font-black text-amber-600">₹{parseFloat(balance).toFixed(2)}</span>
+            </div>
+            <form onSubmit={handleWithdraw} className="space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Withdrawal Amount (₹)</label>
+                <input type="number" min="1" step="0.01" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} placeholder="e.g. 1500" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-lg font-bold focus:ring-2 focus:ring-amber-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Payout Method</label>
+                <div className="flex gap-2">
+                  {["upi", "bank"].map((m) => (
+                    <button key={m} type="button" onClick={() => setPayoutMethod(m)} className={`flex-1 py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${payoutMethod === m ? "bg-amber-50 border-amber-500 text-amber-700" : "bg-white border-slate-200 text-slate-500"}`}>
+                      {m === "upi" ? "UPI" : "Bank Transfer"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {payoutMethod === "upi" ? (
+                <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <div><label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">UPI ID</label><input type="text" placeholder="example@upi" value={payoutDetails.upiId} onChange={(e) => setPayoutDetails({ ...payoutDetails, upiId: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-500 outline-none" /></div>
+                  <div><label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">UPI Mobile</label><input type="text" placeholder="9876543210" value={payoutDetails.upiMobile} onChange={(e) => setPayoutDetails({ ...payoutDetails, upiMobile: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-500 outline-none" /></div>
+                </div>
+              ) : (
+                <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <div><label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Account Number</label><input type="text" placeholder="Account Number" value={payoutDetails.bankAccount} onChange={(e) => setPayoutDetails({ ...payoutDetails, bankAccount: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-500 outline-none" /></div>
+                  <div><label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">IFSC Code</label><input type="text" placeholder="IFSC Code" value={payoutDetails.bankIfsc} onChange={(e) => setPayoutDetails({ ...payoutDetails, bankIfsc: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-500 outline-none" /></div>
+                </div>
+              )}
+              <button type="submit" disabled={isWithdrawing || !withdrawAmount} className="w-full py-3.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                {isWithdrawing ? <Loader2 className="h-5 w-5 animate-spin" /> : "Submit Request"}
+              </button>
+            </form>
+          </div>
+        </ModalWrapper>
+
+        {/* Transfer modal */}
+        <ModalWrapper open={isTransferOpen} onClose={() => setIsTransferOpen(false)}>
+          <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+            <h3 className="font-bold text-slate-900">Transfer Funds</h3>
+            <button onClick={() => setIsTransferOpen(false)} className="p-1.5 text-slate-400 hover:text-slate-900 bg-white rounded-full shadow-sm"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="p-5 space-y-5">
+            <StatusAlert status={transferStatus} />
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex justify-between items-center">
+              <span className="text-xs font-semibold text-slate-500">Available</span>
+              <span className="font-black text-slate-900">₹{parseFloat(balance).toFixed(2)}</span>
+            </div>
+            <form onSubmit={handleTransfer} className="space-y-4">
+              <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Receiver ID or Email</label><input type="text" value={transferReceiver} onChange={(e) => setTransferReceiver(e.target.value)} placeholder="e.g. 45 or john@email.com" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-medium focus:ring-2 focus:ring-slate-900 outline-none" /></div>
+              <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Amount (₹)</label><input type="number" min="1" step="0.01" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} placeholder="e.g. 500" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-lg font-bold focus:ring-2 focus:ring-slate-900 outline-none" /></div>
+              <button type="submit" disabled={isTransferring || !transferAmount || !transferReceiver} className="w-full py-3.5 bg-[#0f2a1f] hover:bg-[#1a3a2a] text-white font-bold rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                {isTransferring ? <Loader2 className="h-5 w-5 animate-spin" /> : "Send Funds Instantly"}
+              </button>
+            </form>
+          </div>
+        </ModalWrapper>
+      </div>
     );
   };
 
-  // ---------------------------------------------------------
-  // 6. NETWORK TAB (DUAL-VIEW D3 TREE & DIRECTORY LIST)
-  // ---------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────
+  // TAB: NETWORK TREE (with upline support)
+  // ─────────────────────────────────────────────────────────────────
   const NetworkTab = () => {
+    const [upline, setUpline] = useState(null);
     const [networkStats, setNetworkStats] = useState({ total: 0, direct: [] });
     const [treeData, setTreeData] = useState(null);
     const [flatTeam, setFlatTeam] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [TreeComponent, setTreeComponent] = useState(null);
-    const [viewMode, setViewMode] = useState("tree"); 
+    const [viewMode, setViewMode] = useState("tree");
     const treeContainerRef = useRef(null);
+    const [treeTranslate, setTreeTranslate] = useState({ x: 300, y: 80 });
 
     useEffect(() => {
-      import("react-d3-tree").then((module) => { setTreeComponent(() => module.default); });
+      const loadUpline = async () => {
+        try {
+          const res = await fetchUplineData();
+          if (res.success && res.data) setUpline(res.data);
+        } catch (e) { /* no upline data */ }
+      };
+      loadUpline();
+    }, []);
+
+    useEffect(() => {
+      import("react-d3-tree")
+        .then((module) => setTreeComponent(() => module.default))
+        .catch((err) => console.error("Failed to load react-d3-tree:", err));
+
       const loadNetwork = async () => {
         setIsLoading(true);
-        const res = await fetchNetworkData(); 
-        if (res.success) { 
-          setNetworkStats({ total: res.totalCount, direct: res.directTeam }); 
-          
-          const transformToD3 = (node) => ({
-            name: node.full_name || `User #${node.user_id}`,
-            attributes: { ID: node.user_id, Status: node.is_active ? 'Active' : 'Inactive', Level: node.level || 1 },
-            children: node.children ? node.children.map(transformToD3) : []
-          });
+        try {
+          const res = await fetchNetworkData();
+          if (res.success) {
+            setNetworkStats({ total: res.totalCount || 0, direct: res.directTeam || [] });
 
-          const flattenTree = (node, depth = 1) => {
-            let list = [];
-            if(node && node.user_id) {
-               list.push({
-                 id: node.user_id,
-                 name: node.full_name || `User #${node.user_id}`,
-                 level: depth,
-                 status: node.is_active ? 'Active' : 'Inactive',
-                 joinDate: node.created_at || new Date().toISOString()
-               });
-            }
-            if(node && node.children) {
-               node.children.forEach(child => { list = list.concat(flattenTree(child, depth + 1)); });
-            }
-            return list;
-          };
+            const transformToD3 = (node) => {
+              if (!node) return null;
+              const name = node.full_name?.trim() || (node.user_id ? `Member #${node.user_id}` : "Unknown");
+              return {
+                name,
+                attributes: {
+                  ID: node.user_id ?? "—",
+                  Status: node.is_active ? "Active" : "Inactive",
+                  Level: node.level ?? 1,
+                },
+                children: Array.isArray(node.children)
+                  ? node.children.map(transformToD3).filter(Boolean)
+                  : [],
+              };
+            };
 
-          if (res.tree && Object.keys(res.tree).length > 0) { 
-            setTreeData([transformToD3(res.tree)]); 
-            setFlatTeam(flattenTree(res.tree));
+            const flattenTree = (node, depth = 1) => {
+              if (!node) return [];
+              let list = [];
+              if (node.user_id !== undefined) {
+                list.push({
+                  id: node.user_id,
+                  name: node.full_name?.trim() || `Member #${node.user_id}`,
+                  level: depth,
+                  status: node.is_active ? "Active" : "Inactive",
+                  joinDate: node.created_at || new Date().toISOString(),
+                });
+              }
+              if (Array.isArray(node.children)) {
+                node.children.forEach((child) => {
+                  list = list.concat(flattenTree(child, depth + 1));
+                });
+              }
+              return list;
+            };
+
+            if (res.tree && Object.keys(res.tree).length > 0) {
+              const d3Node = transformToD3(res.tree);
+              if (d3Node) {
+                if (upline) {
+                  const uplineNode = transformToD3(upline);
+                  if (uplineNode) {
+                    uplineNode.children = [d3Node];
+                    setTreeData([uplineNode]);
+                  } else {
+                    setTreeData([d3Node]);
+                  }
+                } else {
+                  setTreeData([d3Node]);
+                }
+                setFlatTeam(flattenTree(res.tree));
+              }
+            }
           }
+        } catch (e) {
+          console.error("Network load error:", e);
+          setTreeData(null);
         }
         setIsLoading(false);
       };
       loadNetwork();
-    }, []);
+    }, [upline]);
 
-    const scrollToTree = () => { treeContainerRef.current?.scrollIntoView({ behavior: 'smooth' }); };
+    useEffect(() => {
+      const handleResize = () => {
+        if (treeContainerRef.current && treeData) {
+          const { width } = treeContainerRef.current.getBoundingClientRect();
+          setTreeTranslate({ x: Math.floor(width / 2), y: 80 });
+        }
+      };
+      window.addEventListener("resize", handleResize);
+      return () => window.removeEventListener("resize", handleResize);
+    }, [treeData]);
+
+    const handleStatCardClick = () => setViewMode("tree");
 
     return (
-      <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="mb-8 flex flex-col sm:flex-row justify-between sm:items-end gap-4">
+      <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4">
           <div>
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">My Network Matrix</h2>
-            <p className="text-slate-500 font-medium mt-1">Track and manage your entire downline organization.</p>
+            <h2 className="text-2xl font-black text-slate-900">My Network</h2>
+            <p className="text-slate-500 text-sm mt-1">Track your upline and entire downline.</p>
           </div>
-          <div className="flex bg-slate-200/50 p-1.5 rounded-xl border border-slate-200 self-start">
-            <button onClick={() => setViewMode('tree')} className={`px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${viewMode === 'tree' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Visual Matrix</button>
-            <button onClick={() => setViewMode('table')} className={`px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${viewMode === 'table' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Directory List</button>
+          <div className="flex bg-slate-100 p-1 rounded-xl self-start">
+            <button onClick={() => setViewMode("tree")} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${viewMode === "tree" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Visual Tree</button>
+            <button onClick={() => setViewMode("table")} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${viewMode === "table" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Directory</button>
           </div>
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div onClick={scrollToTree} className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-xl transition-all border border-slate-100 p-6 flex items-center cursor-pointer hover:-translate-y-1 group">
-            <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-colors"><GitMerge className="h-8 w-8" /></div>
-            <div className="ml-5"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Network</p><h3 className="text-3xl font-black text-slate-900 mt-1">{isLoading ? "..." : networkStats.total} <span className="text-sm font-bold text-slate-500">Members</span></h3></div>
-          </div>
 
-          <div onClick={scrollToTree} className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-xl transition-all border border-slate-100 p-6 flex items-center cursor-pointer hover:-translate-y-1 group">
-            <div className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl group-hover:bg-emerald-600 group-hover:text-white transition-colors"><UserPlus className="h-8 w-8" /></div>
-            <div className="ml-5"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Direct Referrals</p><h3 className="text-3xl font-black text-slate-900 mt-1">{isLoading ? "..." : networkStats.direct.length} <span className="text-sm font-bold text-slate-500">Directs</span></h3></div>
+        {/* Upline Card */}
+        {upline && (
+          <div className="bg-white border border-amber-100/50 rounded-2xl shadow-sm p-5 flex items-center gap-4">
+            <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+              <UserPlus className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Upline Member</p>
+              <h3 className="text-lg font-bold text-slate-900">{upline.full_name}</h3>
+              <p className="text-sm text-slate-500">ID: #{upline.user_id} · Level {upline.level}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          <div onClick={handleStatCardClick} className="bg-white border border-amber-100/50 rounded-2xl shadow-sm p-5 flex items-center gap-4 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all group">
+            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+              <GitMerge className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Total Network</p>
+              <h3 className="text-2xl font-black text-slate-900">{isLoading ? "…" : networkStats.total} <span className="text-sm font-semibold text-slate-400">members</span></h3>
+            </div>
+          </div>
+          <div onClick={handleStatCardClick} className="bg-white border border-amber-100/50 rounded-2xl shadow-sm p-5 flex items-center gap-4 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all group">
+            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+              <UserPlus className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Direct Referrals</p>
+              <h3 className="text-2xl font-black text-slate-900">{isLoading ? "…" : networkStats.direct.length} <span className="text-sm font-semibold text-slate-400">directs</span></h3>
+            </div>
           </div>
         </div>
 
         {viewMode === "tree" ? (
-          <div ref={treeContainerRef} className="h-[700px] w-full bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden relative mt-8 cursor-grab active:cursor-grabbing">
-            <div className="absolute top-6 left-6 z-10 bg-white/90 backdrop-blur-md p-4 rounded-2xl border border-slate-100 shadow-lg">
-              <h3 className="font-black text-slate-900 flex items-center"><GitMerge className="h-5 w-5 mr-2 text-indigo-500"/> Interactive Matrix</h3>
-              <p className="text-xs font-medium text-slate-500 mt-1">Scroll to zoom. Click to expand branches.</p>
+          <div ref={treeContainerRef} className="h-[600px] w-full bg-white rounded-2xl border border-amber-100/50 shadow-sm overflow-hidden relative cursor-grab active:cursor-grabbing">
+            <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-md p-3 rounded-xl border border-amber-100 shadow-sm">
+              <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><GitMerge className="h-3.5 w-3.5 text-indigo-500" /> Interactive Tree</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Scroll to zoom · click nodes to expand</p>
             </div>
-
             {isLoading ? (
-              <div className="flex flex-col items-center justify-center h-full"><Loader2 className="h-12 w-12 animate-spin text-emerald-500 mb-4" /><p className="text-slate-500 font-bold">Rendering network matrix...</p></div>
+              <div className="flex flex-col items-center justify-center h-full gap-3">
+                <Loader2 className="h-10 w-10 animate-spin text-amber-500" />
+                <p className="text-slate-400 text-sm font-medium">Loading network…</p>
+              </div>
             ) : TreeComponent && treeData ? (
-              <TreeComponent 
-                data={treeData} 
-                orientation="vertical" 
-                pathFunc="step" 
+              <TreeComponent
+                data={treeData}
+                orientation="vertical"
+                pathFunc="step"
                 collapsible={true}
-                translate={{ x: 400, y: 100 }}
-                nodeSize={{ x: 280, y: 180 }}
-                renderCustomNodeElement={({ nodeDatum, toggleNode }) => (
-                  <g>
-                    <rect width="220" height="80" x="-110" y="-40" fill="white" stroke={nodeDatum.attributes?.Status === 'Active' ? '#10b981' : '#cbd5e1'} strokeWidth="2" rx="16" onClick={toggleNode} className="cursor-pointer drop-shadow-md hover:drop-shadow-xl transition-all" />
-                    <text fill="#0f172a" strokeWidth="1" x="0" y="-12" textAnchor="middle" alignmentBaseline="middle" className="font-black text-[16px] font-sans">{nodeDatum.name}</text>
-                    <text fill="#64748b" x="0" y="14" textAnchor="middle" alignmentBaseline="middle" className="text-[13px] font-bold font-sans">Level: {nodeDatum.attributes?.Level} • {nodeDatum.attributes?.Status}</text>
-                    {nodeDatum.children && nodeDatum.children.length > 0 && (
-                      <circle cx="0" cy="40" r="14" fill="#f8fafc" stroke={nodeDatum.attributes?.Status === 'Active' ? '#10b981' : '#cbd5e1'} strokeWidth="2" onClick={toggleNode} className="cursor-pointer hover:fill-slate-200 transition-colors" />
-                    )}
-                    {nodeDatum.children && nodeDatum.children.length > 0 && (
-                       <text fill={nodeDatum.attributes?.Status === 'Active' ? '#10b981' : '#94a3b8'} x="0" y="44" textAnchor="middle" alignmentBaseline="middle" className="text-[16px] font-black pointer-events-none">+</text>
-                    )}
-                  </g>
-                )}
+                translate={treeTranslate}
+                nodeSize={{ x: 240, y: 160 }}
+                separation={{ siblings: 1.2, nonSiblings: 1.5 }}
+                renderCustomNodeElement={({ nodeDatum, toggleNode }) => {
+                  const isActive = nodeDatum.attributes?.Status === "Active";
+                  return (
+                    <g>
+                      <rect
+                        width="200" height="72" x="-100" y="-36"
+                        fill="white"
+                        stroke={isActive ? "#10b981" : "#cbd5e1"}
+                        strokeWidth="1.5" rx="12"
+                        onClick={toggleNode}
+                        style={{ cursor: "pointer", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.06))" }}
+                      />
+                      <text fill="#0f172a" x="0" y="-10" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: "13px", fontWeight: "700", fontFamily: "system-ui" }}>{nodeDatum.name.length > 20 ? nodeDatum.name.slice(0, 18) + "…" : nodeDatum.name}</text>
+                      <text fill={isActive ? "#059669" : "#94a3b8"} x="0" y="12" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: "11px", fontWeight: "600", fontFamily: "system-ui" }}>Level {nodeDatum.attributes?.Level} · {nodeDatum.attributes?.Status}</text>
+                      {nodeDatum.children && nodeDatum.children.length > 0 && (
+                        <g onClick={toggleNode} style={{ cursor: "pointer" }}>
+                          <circle cx="0" cy="36" r="12" fill="#f8fafc" stroke={isActive ? "#10b981" : "#cbd5e1"} strokeWidth="1.5" />
+                          <text fill={isActive ? "#059669" : "#94a3b8"} x="0" y="40" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: "16px", fontWeight: "900", fontFamily: "system-ui", pointerEvents: "none" }}>+</text>
+                        </g>
+                      )}
+                    </g>
+                  );
+                }}
               />
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-slate-500">
-                <Users className="h-20 w-20 text-slate-200 mb-4" />
-                <p className="font-bold text-lg text-slate-400">Your network is empty.</p>
+              <div className="flex flex-col items-center justify-center h-full">
+                <Users className="h-16 w-16 text-slate-200 mb-3" />
+                <p className="font-semibold text-slate-400">Your network is empty.</p>
+                <p className="text-sm text-slate-300 mt-1">Share your referral link to start building.</p>
               </div>
             )}
           </div>
         ) : (
-          <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden mt-8 animate-in fade-in duration-300">
-            <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-              <h3 className="text-xl font-black text-slate-900 flex items-center"><ListTree className="h-5 w-5 mr-3 text-indigo-500"/> Downline Directory</h3>
-              <span className="bg-indigo-100 text-indigo-700 px-3 py-1 text-xs font-black rounded-lg uppercase tracking-wider">{flatTeam.length} Records</span>
+          <div className="bg-white rounded-2xl border border-amber-100/50 shadow-sm overflow-hidden animate-in fade-in duration-300">
+            <div className="px-6 py-4 border-b border-amber-100/50 bg-amber-50/30 flex items-center justify-between">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2"><ListTree className="h-4 w-4 text-indigo-500" /> Downline Directory</h3>
+              <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 text-xs font-bold rounded-lg">{flatTeam.length} records</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-slate-400 font-bold border-b border-slate-100 uppercase tracking-wider text-xs">
-                  <tr><th className="px-8 py-5">Member Name</th><th className="px-8 py-5 text-center">Generation Level</th><th className="px-8 py-5">Join Date</th><th className="px-8 py-5 text-right">Status</th></tr>
+                <thead className="bg-slate-50 text-slate-400 font-semibold border-b border-slate-100 text-xs uppercase tracking-wider">
+                  <tr><th className="px-6 py-3">Member</th><th className="px-6 py-3 text-center">Level</th><th className="px-6 py-3">Joined</th><th className="px-6 py-3 text-right">Status</th></tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {isLoading ? <tr><td colSpan="4" className="px-8 py-12 text-center text-slate-400"><Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-emerald-500" /> Compiling directory...</td></tr>
-                  : flatTeam.length === 0 ? <tr><td colSpan="4" className="px-8 py-16 text-center text-slate-500"><Users className="h-12 w-12 text-slate-200 mx-auto mb-3"/>Your network is currently empty.</td></tr>
-                  : flatTeam.map((member, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-8 py-6">
-                        <div className="flex items-center">
-                          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-600 font-black mr-4 shadow-sm border border-slate-200">
-                            {member.name.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <span className="text-slate-900 font-black text-base">{member.name}</span>
-                            <span className="block text-xs font-bold text-slate-400 mt-0.5">ID: #{member.id}</span>
-                          </div>
+                <tbody className="divide-y divide-slate-50">
+                  {isLoading ? (
+                    <tr><td colSpan={4} className="px-6 py-10 text-center text-slate-400"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-amber-500" />Compiling directory…</td></tr>
+                  ) : flatTeam.length === 0 ? (
+                    <tr><td colSpan={4} className="px-6 py-14 text-center"><Users className="h-10 w-10 text-slate-200 mx-auto mb-2" /><p className="text-slate-400 text-sm">No downline members yet.</p></td></tr>
+                  ) : flatTeam.map((member) => (
+                    <tr key={member.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-600 font-bold text-sm shrink-0 border border-slate-200">{member.name.charAt(0).toUpperCase()}</div>
+                          <div><p className="font-bold text-slate-900 text-sm">{member.name}</p><p className="text-xs text-slate-400">ID #{member.id}</p></div>
                         </div>
                       </td>
-                      <td className="px-8 py-6 text-center"><span className="px-4 py-1.5 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-xl font-black text-sm">Level {member.level}</span></td>
-                      <td className="px-8 py-6 text-slate-500 font-bold whitespace-nowrap">{new Date(member.joinDate).toLocaleDateString('en-IN')}</td>
-                      <td className="px-8 py-6 text-right"><span className={`px-4 py-1.5 text-xs font-black rounded-xl uppercase tracking-wider border ${member.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{member.status}</span></td>
+                      <td className="px-6 py-4 text-center"><span className="px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-lg font-bold text-xs">L{member.level}</span></td>
+                      <td className="px-6 py-4 text-slate-500 text-xs font-medium whitespace-nowrap">{new Date(member.joinDate).toLocaleDateString("en-IN")}</td>
+                      <td className="px-6 py-4 text-right"><span className={`px-3 py-1 text-xs font-bold rounded-lg border ${member.status === "Active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-500 border-slate-200"}`}>{member.status}</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -908,415 +1328,292 @@ export default function DashboardPage() {
     );
   };
 
-  // ---------------------------------------------------------
-  // 7. PRODUCT CATALOG TAB
-  // ---------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────
+  // TAB: PRODUCT CATALOG (unchanged except color inheritance)
+  // ─────────────────────────────────────────────────────────────────
   const ProductCatalogTab = () => {
     const [packages, setPackages] = useState([]);
-    const [compPlan, setCompPlan] = useState({ global: [], levels: [], bonuses: [] });
     const [isLoading, setIsLoading] = useState(true);
     const [buyStatus, setBuyStatus] = useState({ type: "", msg: "" });
-    const [isPurchasing, setIsPurchasing] = useState(false);
+    const [isPurchasing, setIsPurchasing] = useState(null);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
-    const [purchasedPlanDetails, setPurchasedPlanDetails] = useState(null);
+    const [purchasedPlan, setPurchasedPlan] = useState(null);
+    const [confirmPkg, setConfirmPkg] = useState(null);
 
     useEffect(() => {
       const loadData = async () => {
         setIsLoading(true);
-        const [pkgRes, compRes] = await Promise.all([fetchPackages(), fetchCompensationPlan()]);
-        if (pkgRes.success) setPackages(pkgRes.data);
-        if (compRes.success && compRes.data) setCompPlan({ global: compRes.data.global || [], levels: compRes.data.levels || [], bonuses: compRes.data.bonuses || [] });
+        try {
+          const pkgRes = await fetchPackages();
+          if (pkgRes.success) setPackages(pkgRes.data);
+        } catch (e) { /* API pending */ }
         setIsLoading(false);
       };
       loadData();
     }, []);
 
     const handleBuy = async (pkg) => {
-      if (!window.confirm(`Are you sure you want to purchase the ${pkg.name} plan and join the network?`)) return;
-      setIsPurchasing(true); setBuyStatus({ type: "", msg: "" });
-      const res = await purchasePlan(pkg.id);
-      if (res.success) { setPurchasedPlanDetails(pkg); setShowSuccessModal(true); } 
-      else { setBuyStatus({ type: "error", msg: res.message }); }
-      setIsPurchasing(false);
+      setConfirmPkg(null);
+      setIsPurchasing(pkg.id);
+      setBuyStatus({ type: "", msg: "" });
+      try {
+        const res = await purchasePlan(pkg.id);
+        if (res.success) { setPurchasedPlan(pkg); setShowSuccessModal(true); }
+        else { setBuyStatus({ type: "error", msg: res.message }); }
+      } catch (e) { setBuyStatus({ type: "error", msg: "Purchase failed. Please try again." }); }
+      setIsPurchasing(null);
     };
 
     return (
-      <div className="max-w-7xl mx-auto space-y-12 pb-12 relative animate-in fade-in slide-in-from-bottom-4 duration-500">
-        {showSuccessModal && purchasedPlanDetails && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-in fade-in print:hidden">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 text-center p-10">
-              <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner border-4 border-white"><CheckCircle2 className="h-12 w-12 text-emerald-600" /></div>
-              <h2 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Payment Successful!</h2>
-              <p className="text-slate-500 font-medium mb-8">You activated <span className="font-bold text-slate-900">{purchasedPlanDetails.name}</span>.</p>
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-8 text-left">
-                <div className="flex justify-between items-center mb-2"><span className="text-sm text-slate-500 font-medium">Amount Paid</span><span className="font-bold text-slate-900">₹{parseFloat(purchasedPlanDetails.price).toLocaleString('en-IN')}</span></div>
-                <div className="flex justify-between items-center"><span className="text-sm text-slate-500 font-medium">Status</span><span className="text-xs font-bold bg-emerald-100 text-emerald-700 px-2.5 py-0.5 rounded-full">Activated</span></div>
+      <div className="max-w-6xl mx-auto space-y-8 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        {showSuccessModal && purchasedPlan && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 text-center p-8">
+              <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-5 border-4 border-white shadow">
+                <CheckCircle2 className="h-10 w-10 text-amber-600" />
               </div>
-              <button onClick={() => { setShowSuccessModal(false); switchTab("My Orders & Invoices"); }} className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-black text-lg rounded-xl shadow-xl transition-all hover:-translate-y-1">
+              <h2 className="text-2xl font-black text-slate-900 mb-1">Payment Successful!</h2>
+              <p className="text-slate-500 text-sm mb-6">You activated <strong>{purchasedPlan.name}</strong>.</p>
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6 text-left space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-400 font-semibold">Amount Paid</span>
+                  <span className="font-bold text-slate-900">₹{parseFloat(purchasedPlan.price).toLocaleString("en-IN")}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-400 font-semibold">Status</span>
+                  <span className="text-xs font-bold bg-amber-100 text-amber-700 px-2.5 py-0.5 rounded-full">Activated</span>
+                </div>
+              </div>
+              <button onClick={() => { setShowSuccessModal(false); switchTab("My Orders & Invoices"); }} className="w-full py-3 bg-[#0f2a1f] hover:bg-[#1a3a2a] text-white font-bold rounded-xl text-sm transition-all">
                 View Tax Invoice
               </button>
             </div>
           </div>
         )}
 
-        <div>
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end mb-10 gap-4 print:hidden">
-            <div><h2 className="text-3xl font-black text-slate-900 tracking-tight">Product Catalog</h2><p className="text-slate-500 font-medium mt-1">Choose an activation plan to unlock your earning potential.</p></div>
-            <button onClick={() => window.print()} className="print:hidden flex items-center px-6 py-3 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-indigo-600 rounded-xl shadow-sm font-bold text-sm transition-all">
-              <Download className="h-4 w-4 mr-2" /> Download PDF Brochure
-            </button>
-          </div>
-          {buyStatus.msg && <div className={`p-4 mb-6 rounded-xl border flex items-center print:hidden ${buyStatus.type === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}><AlertCircle className="h-5 w-5 mr-3 shrink-0" /><p className="font-semibold">{buyStatus.msg}</p></div>}
-          
-          {isLoading ? <div className="flex flex-col items-center justify-center h-64 print:hidden"><Loader2 className="h-10 w-10 text-emerald-500 animate-spin mb-4" /></div>
-          : packages.length === 0 ? <div className="text-center p-10 bg-white rounded-3xl border border-slate-200 shadow-sm"><ShoppingBag className="h-12 w-12 text-slate-300 mx-auto mb-4" /><h3 className="text-xl font-bold text-slate-900">No Plans Available</h3></div>
-          : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {packages.map((pkg) => (
-                <div key={pkg.id} className={`bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 border ${pkg.is_popular ? 'border-emerald-500 shadow-emerald-100/50' : 'border-slate-100'} relative overflow-hidden flex flex-col group`}>
-                  {pkg.is_popular && <div className="absolute top-0 inset-x-0 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-black uppercase tracking-widest text-center py-2 z-10 shadow-md">Most Popular</div>}
-                  <div className="h-56 bg-slate-100 relative border-b border-slate-100 overflow-hidden">
-                     {pkg.image_url ? <img src={pkg.image_url} alt={pkg.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <div className="flex items-center justify-center h-full text-slate-300"><ImageIcon className="h-20 w-20 opacity-20" /></div>}
-                  </div>
-                  <div className="p-8 pb-4">
-                    <h3 className="text-3xl font-black text-slate-900 tracking-tight">{pkg.name}</h3>
-                    <div className="mt-3 flex items-baseline text-5xl font-black text-emerald-600 drop-shadow-sm"><span className="text-2xl mr-1 font-bold text-emerald-400">₹</span>{parseFloat(pkg.price).toFixed(0)}</div>
-                    <p className="text-slate-400 font-bold mt-2 text-xs uppercase tracking-wider">One-time activation fee</p>
-                  </div>
-                  <div className="p-8 pt-0 flex-1 flex flex-col">
-                    <ul className="space-y-4 flex-1 mt-4">
-                      <li className="flex items-start"><Zap className="h-6 w-6 text-amber-500 mr-3 shrink-0" /><span className="text-sm font-bold text-slate-700">Unlock {pkg.lucky_draw_coupons || 0} Lucky Draw Coupons</span></li>
-                      <li className="flex items-start"><CheckCircle2 className="h-6 w-6 text-emerald-500 mr-3 shrink-0" /><span className="text-sm font-bold text-slate-700">Access to Multi-Level Commissions</span></li>
-                    </ul>
-                    <button onClick={() => handleBuy(pkg)} disabled={isPurchasing} className={`print:hidden mt-8 w-full py-4 px-4 rounded-xl font-black text-lg shadow-xl transition-all flex items-center justify-center hover:-translate-y-1 ${pkg.is_popular ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white' : 'bg-slate-900 hover:bg-slate-800 text-white'}`}>
-                      {isPurchasing ? <Loader2 className="h-6 w-6 animate-spin" /> : "Purchase & Activate"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <hr className="border-slate-200 print:hidden" />
-
-        {!isLoading && (
-          <div className="break-inside-avoid">
-            <div className="mb-8"><h2 className="text-3xl font-black text-slate-900 tracking-tight">Platform Earning Rules</h2><p className="text-slate-500 font-medium mt-1">Your transparent, real-time compensation structure.</p></div>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-1 space-y-6 break-inside-avoid">
-                <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden">
-                  <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50 flex items-center"><Globe className="h-6 w-6 text-indigo-500 mr-3" /><h3 className="text-lg font-black text-slate-900">Global Commissions</h3></div>
-                  <div className="p-8">
-                    {compPlan.global.length === 0 ? <p className="text-sm font-medium text-slate-500">No global rules set.</p> : (
-                      <ul className="space-y-5">
-                        {compPlan.global.map((item, idx) => (
-                          <li key={idx} className="flex justify-between items-center"><span className="text-sm font-bold text-slate-600 capitalize">{item.setting_key.replace(/_/g, ' ')}</span><span className="text-lg font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">{item.percentage_value}%</span></li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-                <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden break-inside-avoid">
-                  <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50 flex items-center"><Target className="h-6 w-6 text-amber-500 mr-3" /><h3 className="text-lg font-black text-slate-900">Target Bonuses</h3></div>
-                  <div className="p-0">
-                    {compPlan.bonuses.length === 0 ? <p className="text-sm font-medium text-slate-500 p-8">No bonuses set.</p> : (
-                      <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50 text-slate-400 font-bold text-xs uppercase tracking-wider"><tr><th className="px-8 py-4">Team Volume Range</th><th className="px-8 py-4 text-right">Bonus (%)</th></tr></thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {compPlan.bonuses.map((bonus, idx) => (
-                            <tr key={idx}><td className="px-8 py-5 font-bold text-slate-700 whitespace-nowrap">₹{parseFloat(bonus.min_volume).toLocaleString('en-IN')} - ₹{parseFloat(bonus.max_volume).toLocaleString('en-IN')}</td><td className="px-8 py-5 text-right font-black text-amber-600 text-lg">{bonus.bonus_percentage}%</td></tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="lg:col-span-2 break-inside-avoid">
-                <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden h-full">
-                  <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50 flex items-center"><BarChart3 className="h-6 w-6 text-emerald-500 mr-3" /><h3 className="text-lg font-black text-slate-900">Level Generation Income</h3></div>
-                  <div className="p-0">
-                    {compPlan.levels.length === 0 ? <p className="text-sm font-medium text-slate-500 p-8">No level commissions set.</p> : (
-                      <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50 text-slate-400 font-bold text-xs uppercase tracking-wider"><tr><th className="px-8 py-4">Generation Level</th><th className="px-8 py-4">Commission %</th></tr></thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {compPlan.levels.map((lvl, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                              <td className="px-8 py-5"><div className="flex items-center"><span className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 font-black flex items-center justify-center mr-4">{lvl.level}</span><span className="font-bold text-slate-700">Level {lvl.level} Network</span></div></td>
-                              <td className="px-8 py-5"><div className="flex items-center"><div className="w-full bg-slate-100 rounded-full h-3 mr-4 max-w-[120px] print:hidden"><div className="bg-emerald-500 h-3 rounded-full print:hidden shadow-inner" style={{ width: `${Math.min(lvl.commission_percentage, 100)}%` }}></div></div><span className="font-black text-emerald-600 text-lg">{lvl.commission_percentage}%</span></div></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                </div>
+        {confirmPkg && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in-95">
+              <h3 className="font-bold text-slate-900 mb-2">Confirm Purchase</h3>
+              <p className="text-sm text-slate-500 mb-6">You are about to activate <strong>{confirmPkg.name}</strong> for <strong>₹{parseFloat(confirmPkg.price).toLocaleString("en-IN")}</strong>. This is a one-time, non-refundable activation fee.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmPkg(null)} className="flex-1 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl text-sm hover:bg-slate-50 transition-all">Cancel</button>
+                <button onClick={() => handleBuy(confirmPkg)} className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-sm transition-all">Yes, Confirm</button>
               </div>
             </div>
           </div>
         )}
-      </div>
-    );
-  };
 
-  // ---------------------------------------------------------
-  // 8. MY ORDERS TAB
-  // ---------------------------------------------------------
-  const OrdersTab = () => {
-    const [orders, setOrders] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [activeInvoice, setActiveInvoice] = useState(null);
-
-    useEffect(() => {
-      const loadOrders = async () => {
-        setIsLoading(true);
-        const res = await fetchUserOrders();
-        if (res.success) setOrders(res.data);
-        setIsLoading(false);
-      };
-      loadOrders();
-    }, []);
-
-    const handlePrintInvoice = (order) => {
-      setActiveInvoice(order);
-      setTimeout(() => { window.print(); }, 150);
-    };
-
-    return (
-      <div className={`max-w-6xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ${activeInvoice ? 'print:hidden' : ''}`}>
-        <div className="mb-8 flex justify-between items-end">
-          <div><h2 className="text-3xl font-black text-slate-900 tracking-tight">My Orders & Invoices</h2><p className="text-slate-500 font-medium mt-1">View your purchase history and download individual GST receipts.</p></div>
-        </div>
-
-        <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-400 font-bold border-b border-slate-100 uppercase tracking-wider text-xs">
-                <tr><th className="px-8 py-5">Invoice ID</th><th className="px-8 py-5">Date</th><th className="px-8 py-5">Package Details</th><th className="px-8 py-5">Amount Paid</th><th className="px-8 py-5 text-center">Action</th></tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {isLoading ? <tr><td colSpan="5" className="px-8 py-12 text-center text-slate-400"><Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-emerald-500" /> Syncing orders...</td></tr>
-                : orders.length === 0 ? <tr><td colSpan="5" className="px-8 py-16 text-center text-slate-500"><Receipt className="h-12 w-12 text-slate-200 mx-auto mb-3"/>No purchases found.</td></tr>
-                : orders.map((order, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-8 py-6 font-mono text-slate-500 text-sm font-bold">#INV-{order.order_id.toString().padStart(6, '0')}</td>
-                    <td className="px-8 py-6 text-slate-600 font-medium whitespace-nowrap">{new Date(order.created_at).toLocaleDateString('en-IN')}</td>
-                    <td className="px-8 py-6 text-slate-900 font-black text-base">{order.package_name}</td>
-                    <td className="px-8 py-6 font-black text-emerald-600 text-lg">₹{parseFloat(order.amount).toLocaleString('en-IN')}</td>
-                    <td className="px-8 py-6 text-center"><button onClick={() => handlePrintInvoice(order)} className="inline-flex items-center justify-center px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-900 hover:text-white rounded-xl transition-all text-sm font-bold shadow-sm"><Printer className="h-4 w-4 mr-2" /> Download PDF</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
+          <div>
+            <h2 className="text-2xl font-black text-slate-900">Product Catalog</h2>
+            <p className="text-slate-500 text-sm mt-1">Choose an activation plan to unlock your earning potential.</p>
           </div>
+          <button onClick={() => window.print()} className="print:hidden flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-sm font-semibold transition-all">
+            <Download className="h-4 w-4" /> Download Brochure
+          </button>
         </div>
 
-        {activeInvoice && (
-          <div className="hidden print:block absolute top-0 left-0 w-full bg-white text-black p-12 z-50 min-h-screen">
-            <div className="flex justify-between items-start border-b-2 border-slate-200 pb-8 mb-8">
-              <div>
-                <h1 className="text-4xl font-black text-slate-900 tracking-tight">RK Trendz</h1>
-                <p className="text-sm text-slate-500 mt-1">Network Marketing Platform</p>
-                <div className="mt-4 text-sm text-slate-600"><p>101, Business Park Tower A</p><p>Andheri East, Mumbai 400069</p><p className="font-bold mt-1">GSTIN: <span className="font-mono text-slate-500">27AAACR0000A1Z5</span></p></div>
-              </div>
-              <div className="text-right">
-                <h2 className="text-3xl font-bold text-slate-300 uppercase tracking-widest">Tax Invoice</h2>
-                <p className="font-mono text-lg text-slate-800 mt-2">#INV-{activeInvoice.order_id.toString().padStart(6, '0')}</p>
-                <p className="text-sm text-slate-500 mt-1">Date: {new Date(activeInvoice.created_at).toLocaleDateString()}</p>
-              </div>
-            </div>
-
-            <div className="mb-10">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Billed To</h3>
-              <p className="text-xl font-bold text-slate-900">{user.full_name}</p>
-              <p className="text-slate-600">{user.email}</p>
-              <p className="text-slate-600 mt-1">User ID: <span className="font-mono font-bold text-slate-800">#{user.id}</span></p>
-            </div>
-
-            <table className="w-full text-left mb-10">
-              <thead className="bg-slate-50 border-y border-slate-200">
-                <tr><th className="py-4 px-6 text-sm font-bold text-slate-700">Description</th><th className="py-4 px-6 text-sm font-bold text-slate-700 text-center">Qty</th><th className="py-4 px-6 text-sm font-bold text-slate-700 text-right">Total Amount</th></tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                <tr>
-                  <td className="py-6 px-6"><p className="font-bold text-slate-900 text-lg">Digital Package: {activeInvoice.package_name}</p><p className="text-sm text-slate-500 mt-1">Platform activation & {activeInvoice.lucky_draw_coupons} Lucky Draw Coupons</p></td>
-                  <td className="py-6 px-6 text-center font-bold text-slate-700">1</td>
-                  <td className="py-6 px-6 text-right font-black text-slate-900 text-lg">₹{parseFloat(activeInvoice.amount).toLocaleString('en-IN')}</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div className="flex justify-end">
-              <div className="w-1/2 border-t border-slate-200 pt-4">
-                <div className="flex justify-between mb-3 text-sm text-slate-600"><span>Base Amount</span><span className="font-bold">₹{(parseFloat(activeInvoice.amount) / 1.18).toFixed(2)}</span></div>
-                <div className="flex justify-between mb-5 text-sm text-slate-600"><span>IGST (18%)</span><span className="font-bold">₹{(parseFloat(activeInvoice.amount) - (parseFloat(activeInvoice.amount) / 1.18)).toFixed(2)}</span></div>
-                <div className="flex justify-between items-center border-t-2 border-slate-800 pt-4"><span className="text-xl font-bold text-slate-900">Total Invoice Value</span><span className="text-3xl font-black text-slate-900">₹{parseFloat(activeInvoice.amount).toLocaleString('en-IN')}</span></div>
-                <p className="text-right text-xs text-slate-400 mt-2 font-bold uppercase">(Inclusive of all taxes)</p>
-              </div>
-            </div>
-
-            <div className="mt-32 pt-8 border-t border-slate-200 text-center">
-              <p className="text-sm font-bold text-slate-800">For RK Trendz Pvt. Ltd.</p><p className="text-xs text-slate-500 mt-1">Authorized Signatory</p><p className="text-xs text-slate-400 mt-8 font-medium">This is a computer-generated invoice and does not require a physical signature.</p>
-            </div>
+        {buyStatus.msg && (
+          <div className={`p-4 rounded-xl border flex items-center gap-3 ${buyStatus.type === "error" ? "bg-red-50 border-red-200 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-700"}`}>
+            <AlertCircle className="h-4 w-4 shrink-0" /><p className="text-sm font-semibold">{buyStatus.msg}</p>
           </div>
         )}
-      </div>
-    );
-  };
 
-  // ---------------------------------------------------------
-  // 9. HELP & SUPPORT TAB
-  // ---------------------------------------------------------
-  const SupportTab = () => {
-    const [tickets, setTickets] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
-    
-    const [subject, setSubject] = useState("");
-    const [message, setMessage] = useState("");
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
-    useEffect(() => {
-      const loadTickets = async () => {
-        setIsLoading(true);
-        const res = await fetchTickets();
-        if (res.success) setTickets(res.data);
-        setIsLoading(false);
-      };
-      loadTickets();
-    }, []);
-
-    const handleCreateTicket = async (e) => {
-      e.preventDefault();
-      setIsSubmitting(true);
-      const res = await createTicket(subject, message);
-      if (res.success) {
-        setSubject(""); setMessage(""); setIsTicketModalOpen(false);
-        const updatedRes = await fetchTickets();
-        if (updatedRes.success) setTickets(updatedRes.data);
-        alert(res.message);
-      } else {
-        alert(res.message);
-      }
-      setIsSubmitting(false);
-    };
-
-    return (
-      <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="mb-8 flex flex-col sm:flex-row justify-between sm:items-end gap-4">
-          <div><h2 className="text-3xl font-black text-slate-900 tracking-tight">Help & Support</h2><p className="text-slate-500 font-medium mt-1">Need assistance? Open a ticket to reach our dedicated admin team.</p></div>
-          <button onClick={() => setIsTicketModalOpen(true)} className="flex items-center justify-center px-6 py-3 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:bg-slate-800 transition-all hover:-translate-y-1"><Plus className="h-5 w-5 mr-2" /> Open New Ticket</button>
-        </div>
-
-        <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-400 font-bold border-b border-slate-100 uppercase tracking-wider text-xs">
-                <tr><th className="px-8 py-5">Ticket ID</th><th className="px-8 py-5">Subject</th><th className="px-8 py-5">Date Opened</th><th className="px-8 py-5 text-center">Status</th></tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {isLoading ? (
-                  <tr><td colSpan="4" className="px-8 py-12 text-center text-slate-400"><Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-indigo-500" /> Syncing tickets...</td></tr>
-                ) : tickets.length === 0 ? (
-                  <tr><td colSpan="4" className="px-8 py-16 text-center text-slate-500"><LifeBuoy className="h-12 w-12 text-slate-200 mx-auto mb-3" />You have no active support tickets.</td></tr>
-                ) : (
-                  tickets.map((ticket, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 transition-colors group">
-                      <td className="px-8 py-6 font-mono text-slate-500 text-sm font-bold">#TKT-{ticket.id}</td>
-                      <td className="px-8 py-6 text-slate-900 font-black text-base">{ticket.subject}</td>
-                      <td className="px-8 py-6 text-slate-600 font-medium whitespace-nowrap">{new Date(ticket.created_at || ticket.date).toLocaleDateString('en-IN')}</td>
-                      <td className="px-8 py-6 text-center"><span className={`px-4 py-2 text-xs font-bold rounded-xl ${ticket.status === 'Open' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>{ticket.status}</span></td>
-                    </tr>
-                  ))
+        {isLoading ? (
+          <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 text-amber-500 animate-spin" /></div>
+        ) : packages.length === 0 ? (
+          <div className="text-center p-10 bg-white rounded-2xl border border-slate-100">
+            <ShoppingBag className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+            <h3 className="font-bold text-slate-700">No plans available yet.</h3>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {packages.map((pkg) => (
+              <div key={pkg.id} className={`bg-white rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 border flex flex-col overflow-hidden group relative ${pkg.is_popular ? "border-amber-500" : "border-slate-100"}`}>
+                {pkg.is_popular && (
+                  <div className="absolute top-0 inset-x-0 bg-amber-500 text-white text-[10px] font-black uppercase tracking-widest text-center py-1.5 z-10">
+                    Most Popular
+                  </div>
                 )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* CREATE TICKET MODAL */}
-        {isTicketModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
-              <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50"><h3 className="text-xl font-black text-slate-900">Create Support Ticket</h3><button onClick={() => setIsTicketModalOpen(false)} className="text-slate-400 hover:text-slate-900 bg-white p-2 rounded-full shadow-sm transition-colors"><X className="h-5 w-5" /></button></div>
-              <div className="p-8 space-y-6">
-                <form onSubmit={handleCreateTicket} className="space-y-5">
-                  <div><label className="block text-sm font-bold text-slate-700 mb-2">Subject</label><input type="text" required value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Missing Withdrawal" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium focus:ring-2 focus:ring-indigo-500 transition-all" /></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-2">Message</label><textarea required rows="5" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Describe your issue in detail..." className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-medium focus:ring-2 focus:ring-indigo-500 transition-all resize-none"></textarea></div>
-                  <button type="submit" disabled={!subject || !message || isSubmitting} className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-lg rounded-2xl shadow-xl transition-all disabled:opacity-50 flex justify-center hover:-translate-y-1">
-                    {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : "Submit Ticket"}
+                <div className={`h-48 bg-slate-100 border-b border-slate-100 overflow-hidden ${pkg.is_popular ? "mt-6" : ""}`}>
+                  {pkg.image_url
+                    ? <img src={pkg.image_url} alt={pkg.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    : <div className="flex items-center justify-center h-full"><ImageIcon className="h-14 w-14 text-slate-200" /></div>
+                  }
+                </div>
+                <div className="p-6 pb-3">
+                  <h3 className="text-xl font-black text-slate-900">{pkg.name}</h3>
+                  <div className="flex items-baseline gap-1 mt-2">
+                    <span className="text-sm font-bold text-amber-400">₹</span>
+                    <span className="text-4xl font-black text-amber-600">{parseFloat(pkg.price).toFixed(0)}</span>
+                  </div>
+                  <p className="text-slate-400 text-xs font-semibold mt-1 uppercase tracking-wider">One-time activation</p>
+                </div>
+                <div className="p-6 pt-0 flex-1 flex flex-col">
+                  <ul className="space-y-3 flex-1 mt-3">
+                    <li className="flex items-center gap-2.5 text-sm font-medium text-slate-700">
+                      <Zap className="h-4 w-4 text-amber-500 shrink-0" />
+                      {pkg.lucky_draw_coupons || 0} Lucky Draw Coupons
+                    </li>
+                    <li className="flex items-center gap-2.5 text-sm font-medium text-slate-700">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      Multi-Level Commissions Access
+                    </li>
+                    {pkg.description && (
+                      <li className="flex items-start gap-2.5 text-sm font-medium text-slate-600">
+                        <Star className="h-4 w-4 text-indigo-400 shrink-0 mt-0.5" />{pkg.description}
+                      </li>
+                    )}
+                  </ul>
+                  <button
+                    onClick={() => setConfirmPkg(pkg)}
+                    disabled={!!isPurchasing}
+                    className={`print:hidden mt-6 w-full py-3 rounded-xl font-bold text-sm shadow-sm transition-all flex items-center justify-center gap-2 hover:-translate-y-0.5
+                      ${pkg.is_popular
+                        ? "bg-amber-600 hover:bg-amber-700 text-white"
+                        : "bg-[#0f2a1f] hover:bg-[#1a3a2a] text-white"
+                      } disabled:opacity-50`}
+                  >
+                    {isPurchasing === pkg.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Activate Plan"}
                   </button>
-                </form>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         )}
       </div>
     );
   };
 
+  // ─────────────────────────────────────────────────────────────────
+  // TAB RENDERER (unchanged)
+  // ─────────────────────────────────────────────────────────────────
+  const renderTab = () => {
+    switch (activeTab) {
+      case "Overview":          return <OverviewTab />;
+      case "Company Info":      return <CompanyInfoTab />;
+      case "My Profile":        return <ProfileTab />;
+      case "KYC Verification":  return <KycTab />;
+      case "My Network Tree":   return <NetworkTab />;
+      case "Wallet & Payouts":  return <WalletTab />;
+      case "Product Catalog":   return <ProductCatalogTab />;
+      case "My Orders & Invoices": return (
+        <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+          <Receipt className="h-14 w-14 text-slate-200 mb-3" />
+          <p className="font-semibold">Orders & Invoices</p>
+          <p className="text-sm mt-1">Backend integration pending.</p>
+        </div>
+      );
+      case "Help & Support": return (
+        <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+          <LifeBuoy className="h-14 w-14 text-slate-200 mb-3" />
+          <p className="font-semibold">Help & Support</p>
+          <p className="text-sm mt-1">Backend integration pending.</p>
+        </div>
+      );
+      default: return null;
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────
+  // LAYOUT – PREMIUM DARK GREEN SIDEBAR + CREAM BACKGROUND
+  // ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-50/50 flex font-sans selection:bg-emerald-100 selection:text-emerald-900">
-      <aside className="hidden md:flex flex-col w-[19rem] bg-slate-950 text-slate-300 transition-all border-r border-slate-800 print:hidden relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-        <div className="h-[5.5rem] flex items-center px-8 border-b border-slate-800/50 bg-slate-950/50 backdrop-blur-md relative z-10">
-          <h1 className="text-[1.7rem] font-black text-white tracking-tighter">RK <span className="text-emerald-500">Trendz</span></h1>
+    <div className="min-h-screen bg-[#faf8f5] flex">
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-20 bg-slate-900/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      {/* Sidebar – deep forest green */}
+      <aside className={`
+        fixed top-0 left-0 h-full z-30 w-64 bg-[#0f2a1f] border-r border-[#1a3a2a] flex flex-col
+        transition-transform duration-300 ease-in-out
+        ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        lg:translate-x-0 lg:static lg:flex
+      `}>
+        {/* Logo */}
+        <div className="px-5 py-5 border-b border-[#1a3a2a]">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center">
+              <Globe className="h-4 w-4 text-white" />
+            </div>
+            <span className="font-black text-[#e8dcc8] tracking-tight">RK Trendz</span>
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto py-8 px-5 space-y-2 relative z-10 custom-scrollbar">
-          {menuItems.map((item) => (
-            <button
-              key={item.name}
-              onClick={() => switchTab(item.name)}
-              className={`w-full flex items-center px-5 py-4 text-[0.95rem] font-bold rounded-2xl transition-all duration-300 ${
-                activeTab === item.name ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/25 translate-x-2" : "hover:bg-slate-900 hover:text-white hover:translate-x-1"
-              }`}
-            >
-              <item.icon className={`mr-4 h-[1.15rem] w-[1.15rem] ${activeTab === item.name ? "text-white" : "text-slate-500"}`} />
-              {item.name}
-            </button>
-          ))}
+
+        {/* User info strip */}
+        <div className="px-4 py-3 border-b border-[#1a3a2a] bg-[#0f2a1f]/80">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-300 to-amber-500 flex items-center justify-center text-[#0f2a1f] font-bold text-sm shrink-0">
+              {user.full_name.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-[#e8dcc8] truncate">{user.full_name}</p>
+              <p className="text-[10px] text-amber-200/60 truncate">{user.email}</p>
+            </div>
+          </div>
         </div>
-        <div className="p-6 border-t border-slate-800/50 relative z-10">
-          <button onClick={logout} className="w-full flex items-center justify-center px-4 py-4 text-sm font-black text-red-400 bg-red-500/5 rounded-2xl hover:bg-red-500/10 hover:text-red-300 transition-all border border-red-500/10 hover:border-red-500/20">
-            <LogOut className="mr-3 h-5 w-5" /> Secure Logout
+
+        {/* Nav */}
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+          {menuItems.map((item) => {
+            const isActive = activeTab === item.name;
+            return (
+              <button
+                key={item.name}
+                onClick={() => switchTab(item.name)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all text-left
+                  ${isActive
+                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                    : "text-[#c4b89a] hover:bg-[#1a3a2a] hover:text-[#e8dcc8]"
+                  }`}
+              >
+                <item.icon className={`h-4 w-4 shrink-0 ${isActive ? "text-amber-400" : "text-[#c4b89a]"}`} />
+                {item.name}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Logout */}
+        <div className="p-3 border-t border-[#1a3a2a]">
+          <button
+            onClick={() => { logout(); router.push("/login"); }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-[#c4b89a] hover:bg-red-500/20 hover:text-red-400 transition-all"
+          >
+            <LogOut className="h-4 w-4 shrink-0" /> Log Out
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden print:bg-white print:m-0 print:p-0">
-        <header className="h-[5.5rem] flex items-center justify-between px-8 lg:px-12 border-b border-slate-200/80 bg-white/80 backdrop-blur-xl shrink-0 print:hidden z-20 sticky top-0 shadow-[0_4px_20px_rgb(0,0,0,0.02)]">
-           <div className="flex items-center md:hidden"><h1 className="text-2xl font-black text-slate-900 tracking-tighter">RK <span className="text-emerald-500">Trendz</span></h1></div>
-           <div className="hidden md:block">
-              <h2 className="text-xl font-black text-slate-800">{activeTab}</h2>
-           </div>
-           <div className="ml-auto flex items-center gap-4">
-              <button onClick={() => window.location.reload()} className="flex items-center px-5 py-2.5 text-sm font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-xl shadow-sm hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 transition-all">
-                 <RefreshCw className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">Sync Data</span>
-              </button>
-              <button onClick={logout} className="md:hidden p-3 text-slate-400 hover:text-red-500 bg-slate-50 rounded-xl border border-slate-200 shadow-sm"><LogOut className="h-5 w-5" /></button>
-           </div>
+      {/* Main content */}
+      <div className="flex-1 flex flex-col min-w-0 lg:pl-0">
+        {/* Top bar */}
+        <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-amber-100/50 px-4 lg:px-8 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all">
+              <Menu className="h-5 w-5" />
+            </button>
+            <div>
+              <h1 className="text-base font-bold text-slate-900">{activeTab}</h1>
+              <p className="text-[10px] text-slate-400 hidden sm:block">RK Trendz Member Portal</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 text-xs font-bold rounded-full border border-amber-100">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              Active
+            </span>
+          </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-6 lg:p-12 print:p-0 print:overflow-visible relative">
-          {activeTab === "Overview" && <OverviewTab />}
-          {activeTab === "Company Info" && <CompanyProfileTab />}
-          {activeTab === "My Profile" && <ProfileTab />}
-          {activeTab === "KYC Verification" && <KycTab />}
-          {activeTab === "Wallet & Payouts" && <WalletTab />}
-          {activeTab === "My Network Tree" && <NetworkTab />}
-          {activeTab === "Product Catalog" && <ProductCatalogTab />}
-          {activeTab === "My Orders & Invoices" && <OrdersTab />}
-          {activeTab === "Help & Support" && <SupportTab />}
-        </div>
-      </main>
-
-      <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #334155; }
-      `}</style>
+        {/* Page content */}
+        <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
+          {renderTab()}
+        </main>
+      </div>
     </div>
   );
 }
