@@ -1078,245 +1078,249 @@ export default function DashboardPage() {
     );
   };
 
-  // ─────────────────────────────────────────────────────────────────
-  // TAB: NETWORK TREE (with upline support)
-  // ─────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------
+  // 6. NETWORK TAB (ENTERPRISE ORG CHART & DIRECTORY)
+  // ---------------------------------------------------------
   const NetworkTab = () => {
-    const [upline, setUpline] = useState(null);
     const [networkStats, setNetworkStats] = useState({ total: 0, direct: [] });
     const [treeData, setTreeData] = useState(null);
+    const [uplineData, setUplineData] = useState([]);
     const [flatTeam, setFlatTeam] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [TreeComponent, setTreeComponent] = useState(null);
-    const [viewMode, setViewMode] = useState("tree");
-    const treeContainerRef = useRef(null);
-    const [treeTranslate, setTreeTranslate] = useState({ x: 300, y: 80 });
+    const [viewMode, setViewMode] = useState("tree"); 
 
     useEffect(() => {
-      const loadUpline = async () => {
-        try {
-          const res = await fetchUplineData();
-          if (res.success && res.data) setUpline(res.data);
-        } catch (e) { /* no upline data */ }
-      };
-      loadUpline();
-    }, []);
-
-    useEffect(() => {
-      import("react-d3-tree")
-        .then((module) => setTreeComponent(() => module.default))
-        .catch((err) => console.error("Failed to load react-d3-tree:", err));
-
       const loadNetwork = async () => {
         setIsLoading(true);
         try {
-          const res = await fetchNetworkData();
-          if (res.success) {
-            setNetworkStats({ total: res.totalCount || 0, direct: res.directTeam || [] });
+          // Fetch tree, stats, and upline simultaneously
+          const [networkRes, uplineRes] = await Promise.all([
+            fetchNetworkData(),
+            fetchUplineData()
+          ]);
 
-            const transformToD3 = (node) => {
-              if (!node) return null;
-              const name = node.full_name?.trim() || (node.user_id ? `Member #${node.user_id}` : "Unknown");
-              return {
-                name,
-                attributes: {
-                  ID: node.user_id ?? "—",
-                  Status: node.is_active ? "Active" : "Inactive",
-                  Level: node.level ?? 1,
-                },
-                children: Array.isArray(node.children)
-                  ? node.children.map(transformToD3).filter(Boolean)
-                  : [],
-              };
-            };
+          if (networkRes.success) {
+            setNetworkStats({ total: networkRes.totalCount, direct: networkRes.directTeam });
+            setTreeData(networkRes.tree);
 
+            // Flatten tree for the directory table
             const flattenTree = (node, depth = 1) => {
-              if (!node) return [];
               let list = [];
-              if (node.user_id !== undefined) {
-                list.push({
-                  id: node.user_id,
-                  name: node.full_name?.trim() || `Member #${node.user_id}`,
-                  level: depth,
-                  status: node.is_active ? "Active" : "Inactive",
-                  joinDate: node.created_at || new Date().toISOString(),
-                });
+              if (node && node.user_id && depth > 1) { // Skip root node for downline list
+                 list.push({ 
+                   id: node.user_id, 
+                   name: node.full_name || `User #${node.user_id}`, 
+                   email: node.email || 'N/A',
+                   phone: node.phone || 'N/A',
+                   level: depth - 1, 
+                   status: node.is_active ? 'Active' : 'Inactive', 
+                   joinDate: node.created_at || new Date().toISOString() 
+                 });
               }
-              if (Array.isArray(node.children)) {
-                node.children.forEach((child) => {
-                  list = list.concat(flattenTree(child, depth + 1));
-                });
+              if (node && node.children) {
+                 node.children.forEach(child => { list = list.concat(flattenTree(child, depth + 1)); });
               }
               return list;
             };
-
-            if (res.tree && Object.keys(res.tree).length > 0) {
-              const d3Node = transformToD3(res.tree);
-              if (d3Node) {
-                if (upline) {
-                  const uplineNode = transformToD3(upline);
-                  if (uplineNode) {
-                    uplineNode.children = [d3Node];
-                    setTreeData([uplineNode]);
-                  } else {
-                    setTreeData([d3Node]);
-                  }
-                } else {
-                  setTreeData([d3Node]);
-                }
-                setFlatTeam(flattenTree(res.tree));
-              }
+            
+            if (networkRes.tree && Object.keys(networkRes.tree).length > 0) {
+              setFlatTeam(flattenTree(networkRes.tree));
             }
           }
-        } catch (e) {
-          console.error("Network load error:", e);
-          setTreeData(null);
+
+          if (uplineRes.success && uplineRes.data) {
+            setUplineData(uplineRes.data);
+          }
+        } catch (error) {
+          console.error("Failed to compile network view", error);
         }
         setIsLoading(false);
       };
       loadNetwork();
-    }, [upline]);
+    }, []);
 
-    useEffect(() => {
-      const handleResize = () => {
-        if (treeContainerRef.current && treeData) {
-          const { width } = treeContainerRef.current.getBoundingClientRect();
-          setTreeTranslate({ x: Math.floor(width / 2), y: 80 });
-        }
-      };
-      window.addEventListener("resize", handleResize);
-      return () => window.removeEventListener("resize", handleResize);
-    }, [treeData]);
+    // Custom Recursive Component for the Top-Down Org Chart
+    const OrgChartNode = ({ node, isRoot = false }) => {
+      const [expanded, setExpanded] = useState(true);
+      const hasChildren = node.children && node.children.length > 0;
 
-    const handleStatCardClick = () => setViewMode("tree");
-
-    return (
-      <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4">
-          <div>
-            <h2 className="text-2xl font-black text-slate-900">My Network</h2>
-            <p className="text-slate-500 text-sm mt-1">Track your upline and entire downline.</p>
-          </div>
-          <div className="flex bg-slate-100 p-1 rounded-xl self-start">
-            <button onClick={() => setViewMode("tree")} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${viewMode === "tree" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Visual Tree</button>
-            <button onClick={() => setViewMode("table")} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${viewMode === "table" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Directory</button>
-          </div>
-        </div>
-
-        {/* Upline Card */}
-        {upline && (
-          <div className="bg-white border border-amber-100/50 rounded-2xl shadow-sm p-5 flex items-center gap-4">
-            <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
-              <UserPlus className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Upline Member</p>
-              <h3 className="text-lg font-bold text-slate-900">{upline.full_name}</h3>
-              <p className="text-sm text-slate-500">ID: #{upline.user_id} · Level {upline.level}</p>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-4">
-          <div onClick={handleStatCardClick} className="bg-white border border-amber-100/50 rounded-2xl shadow-sm p-5 flex items-center gap-4 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all group">
-            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-              <GitMerge className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Total Network</p>
-              <h3 className="text-2xl font-black text-slate-900">{isLoading ? "…" : networkStats.total} <span className="text-sm font-semibold text-slate-400">members</span></h3>
-            </div>
-          </div>
-          <div onClick={handleStatCardClick} className="bg-white border border-amber-100/50 rounded-2xl shadow-sm p-5 flex items-center gap-4 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all group">
-            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-              <UserPlus className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Direct Referrals</p>
-              <h3 className="text-2xl font-black text-slate-900">{isLoading ? "…" : networkStats.direct.length} <span className="text-sm font-semibold text-slate-400">directs</span></h3>
-            </div>
-          </div>
-        </div>
-
-        {viewMode === "tree" ? (
-          <div ref={treeContainerRef} className="h-[600px] w-full bg-white rounded-2xl border border-amber-100/50 shadow-sm overflow-hidden relative cursor-grab active:cursor-grabbing">
-            <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-md p-3 rounded-xl border border-amber-100 shadow-sm">
-              <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><GitMerge className="h-3.5 w-3.5 text-indigo-500" /> Interactive Tree</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">Scroll to zoom · click nodes to expand</p>
-            </div>
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center h-full gap-3">
-                <Loader2 className="h-10 w-10 animate-spin text-amber-500" />
-                <p className="text-slate-400 text-sm font-medium">Loading network…</p>
+      return (
+        <div className="flex flex-col items-center">
+          {/* Card UI */}
+          <div 
+            onClick={() => hasChildren && setExpanded(!expanded)}
+            className={`relative z-10 w-72 bg-white rounded-2xl shadow-md border-2 transition-all duration-300 ${isRoot ? 'border-indigo-500 shadow-indigo-100' : node.is_active ? 'border-emerald-500 hover:shadow-emerald-100 cursor-pointer' : 'border-slate-200 cursor-pointer'}`}
+          >
+            <div className={`p-4 border-b flex justify-between items-center ${isRoot ? 'bg-indigo-50' : node.is_active ? 'bg-emerald-50' : 'bg-slate-50'} rounded-t-2xl`}>
+              <div className="flex items-center">
+                <div className={`h-10 w-10 rounded-full flex items-center justify-center font-black text-white shadow-inner ${isRoot ? 'bg-indigo-500' : node.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`}>
+                  {node.full_name ? node.full_name.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <div className="ml-3">
+                  <h4 className="font-black text-slate-900 leading-tight truncate w-32">{node.full_name || `User #${node.user_id}`}</h4>
+                  <p className="text-xs font-bold text-slate-500 mt-0.5">ID: {node.user_id}</p>
+                </div>
               </div>
-            ) : TreeComponent && treeData ? (
-              <TreeComponent
-                data={treeData}
-                orientation="vertical"
-                pathFunc="step"
-                collapsible={true}
-                translate={treeTranslate}
-                nodeSize={{ x: 240, y: 160 }}
-                separation={{ siblings: 1.2, nonSiblings: 1.5 }}
-                renderCustomNodeElement={({ nodeDatum, toggleNode }) => {
-                  const isActive = nodeDatum.attributes?.Status === "Active";
-                  return (
-                    <g>
-                      <rect
-                        width="200" height="72" x="-100" y="-36"
-                        fill="white"
-                        stroke={isActive ? "#10b981" : "#cbd5e1"}
-                        strokeWidth="1.5" rx="12"
-                        onClick={toggleNode}
-                        style={{ cursor: "pointer", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.06))" }}
-                      />
-                      <text fill="#0f172a" x="0" y="-10" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: "13px", fontWeight: "700", fontFamily: "system-ui" }}>{nodeDatum.name.length > 20 ? nodeDatum.name.slice(0, 18) + "…" : nodeDatum.name}</text>
-                      <text fill={isActive ? "#059669" : "#94a3b8"} x="0" y="12" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: "11px", fontWeight: "600", fontFamily: "system-ui" }}>Level {nodeDatum.attributes?.Level} · {nodeDatum.attributes?.Status}</text>
-                      {nodeDatum.children && nodeDatum.children.length > 0 && (
-                        <g onClick={toggleNode} style={{ cursor: "pointer" }}>
-                          <circle cx="0" cy="36" r="12" fill="#f8fafc" stroke={isActive ? "#10b981" : "#cbd5e1"} strokeWidth="1.5" />
-                          <text fill={isActive ? "#059669" : "#94a3b8"} x="0" y="40" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: "16px", fontWeight: "900", fontFamily: "system-ui", pointerEvents: "none" }}>+</text>
-                        </g>
-                      )}
-                    </g>
-                  );
-                }}
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full">
-                <Users className="h-16 w-16 text-slate-200 mb-3" />
-                <p className="font-semibold text-slate-400">Your network is empty.</p>
-                <p className="text-sm text-slate-300 mt-1">Share your referral link to start building.</p>
+              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-md ${node.is_active ? 'bg-emerald-200 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                {node.is_active ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+            <div className="p-4 space-y-2 bg-white rounded-b-2xl">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-semibold text-slate-500">Rank</span>
+                <span className="font-black text-indigo-600">{isRoot ? user.rank || 'Distributor' : 'Distributor'}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-semibold text-slate-500">Phone</span>
+                <span className="font-bold text-slate-800">{node.phone || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-semibold text-slate-500">Email</span>
+                <span className="font-bold text-slate-800 truncate w-32 text-right">{node.email || 'N/A'}</span>
+              </div>
+            </div>
+            {/* Expand Indicator */}
+            {hasChildren && (
+              <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 bg-white border-2 border-slate-200 rounded-full h-6 w-6 flex items-center justify-center text-slate-500 shadow-sm font-bold text-lg leading-none z-20">
+                {expanded ? '-' : '+'}
               </div>
             )}
           </div>
+
+          {/* Children & Connecting Lines */}
+          {expanded && hasChildren && (
+            <div className="flex flex-col items-center">
+              {/* Vertical line dropping down from parent */}
+              <div className="w-0.5 h-6 bg-slate-300"></div>
+              {/* Container for children */}
+              <div className="flex gap-6 relative pt-4">
+                {/* Horizontal line bridging the children */}
+                {node.children.length > 1 && (
+                  <div className="absolute top-0 left-0 w-full h-0.5 bg-slate-300" style={{ width: `calc(100% - ${100 / node.children.length}%)`, left: `calc(${50 / node.children.length}%)` }}></div>
+                )}
+                {/* Map over children, mapping short vertical drop lines to their cards */}
+                {node.children.map((child, idx) => (
+                  <div key={idx} className="flex flex-col items-center relative">
+                    <div className="w-0.5 h-4 bg-slate-300 absolute top-0"></div>
+                    <div className="pt-4">
+                      <OrgChartNode node={child} isRoot={false} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    return (
+      <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="mb-8 flex flex-col sm:flex-row justify-between sm:items-end gap-4">
+          <div>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">My Network Matrix</h2>
+            <p className="text-slate-500 font-medium mt-1">Track and manage your entire downline organization.</p>
+          </div>
+          <div className="flex bg-slate-200/50 p-1.5 rounded-xl border border-slate-200 self-start shadow-inner">
+            <button onClick={() => setViewMode('tree')} className={`px-5 py-2.5 rounded-lg text-sm font-black transition-all ${viewMode === 'tree' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:text-slate-800'}`}>Visual Chart</button>
+            <button onClick={() => setViewMode('table')} className={`px-5 py-2.5 rounded-lg text-sm font-black transition-all ${viewMode === 'table' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:text-slate-800'}`}>Directory List</button>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-gradient-to-br from-indigo-50 to-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-indigo-100 p-6 relative overflow-hidden group hover:shadow-lg transition-all cursor-pointer" onClick={() => setViewMode('upline')}>
+            <UserMinus className="absolute -right-4 -bottom-4 h-32 w-32 text-indigo-500/10 group-hover:scale-110 transition-transform" />
+            <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest mb-1">My Upline</p>
+            <h3 className="text-2xl font-black text-slate-900">{uplineData.length > 0 ? uplineData[0].full_name : 'System Admin'}</h3>
+            <p className="text-sm font-bold text-slate-500 mt-1 flex items-center">View full upline chain <ChevronRight className="h-4 w-4 ml-1"/></p>
+          </div>
+
+          <div onClick={() => setViewMode('tree')} className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-xl transition-all border border-slate-100 p-6 flex items-center cursor-pointer hover:-translate-y-1 group">
+            <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-colors"><GitMerge className="h-8 w-8" /></div>
+            <div className="ml-5"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Network</p><h3 className="text-3xl font-black text-slate-900 mt-1">{isLoading ? "..." : networkStats.total} <span className="text-sm font-bold text-slate-500">Members</span></h3></div>
+          </div>
+
+          <div onClick={() => setViewMode('table')} className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-xl transition-all border border-slate-100 p-6 flex items-center cursor-pointer hover:-translate-y-1 group">
+            <div className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl group-hover:bg-emerald-600 group-hover:text-white transition-colors"><UserPlus className="h-8 w-8" /></div>
+            <div className="ml-5"><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Direct Referrals</p><h3 className="text-3xl font-black text-slate-900 mt-1">{isLoading ? "..." : networkStats.direct.length} <span className="text-sm font-bold text-slate-500">Directs</span></h3></div>
+          </div>
+        </div>
+
+        {isLoading ? (
+           <div className="h-96 flex flex-col items-center justify-center bg-white rounded-[2rem] border border-slate-100 shadow-sm mt-8"><Loader2 className="h-12 w-12 animate-spin text-indigo-500 mb-4" /><p className="text-slate-500 font-bold">Rendering matrix...</p></div>
+        ) : viewMode === "tree" ? (
+          <div className="w-full bg-slate-100/50 rounded-[2rem] border-2 border-slate-200 overflow-x-auto overflow-y-auto mt-8 p-12 min-h-[600px] custom-scrollbar shadow-inner">
+            {treeData ? (
+              <div className="min-w-max flex justify-center pb-20">
+                <OrgChartNode node={treeData} isRoot={true} />
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                <Users className="h-20 w-20 text-slate-300 mb-4" />
+                <p className="font-bold text-lg text-slate-400">Your downline tree is empty.</p>
+              </div>
+            )}
+          </div>
+        ) : viewMode === "upline" ? (
+          <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden mt-8 animate-in fade-in">
+             <div className="px-8 py-6 border-b border-slate-100 bg-indigo-50/50 flex items-center">
+              <h3 className="text-xl font-black text-slate-900 flex items-center"><UserMinus className="h-6 w-6 mr-3 text-indigo-600"/> Upline Trace</h3>
+            </div>
+            <div className="p-8">
+              {uplineData.length === 0 ? <p className="text-slate-500 font-bold text-center py-10">You are at the top of the organization.</p> : (
+                <div className="space-y-4">
+                  {uplineData.map((sponsor, idx) => (
+                    <div key={idx} className="flex items-center bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="h-12 w-12 rounded-full bg-indigo-100 text-indigo-700 font-black flex items-center justify-center text-xl mr-5">{sponsor.full_name.charAt(0)}</div>
+                      <div className="flex-1">
+                        <h4 className="font-black text-slate-900 text-lg">{sponsor.full_name}</h4>
+                        <div className="flex gap-4 text-xs font-bold text-slate-500 mt-1">
+                           <span>ID: #{sponsor.user_id}</span>
+                           <span>Email: {sponsor.email || 'N/A'}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Level</span>
+                        <span className="px-3 py-1 bg-white border border-slate-200 rounded-lg font-black text-slate-700">Upline {sponsor.level}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-amber-100/50 shadow-sm overflow-hidden animate-in fade-in duration-300">
-            <div className="px-6 py-4 border-b border-amber-100/50 bg-amber-50/30 flex items-center justify-between">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2"><ListTree className="h-4 w-4 text-indigo-500" /> Downline Directory</h3>
-              <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 text-xs font-bold rounded-lg">{flatTeam.length} records</span>
+          <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden mt-8 animate-in fade-in duration-300">
+            <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+              <h3 className="text-xl font-black text-slate-900 flex items-center"><ListTree className="h-5 w-5 mr-3 text-emerald-500"/> Downline Directory</h3>
+              <span className="bg-emerald-100 text-emerald-800 px-4 py-1.5 text-xs font-black rounded-xl uppercase tracking-wider">{flatTeam.length} Records</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-slate-400 font-semibold border-b border-slate-100 text-xs uppercase tracking-wider">
-                  <tr><th className="px-6 py-3">Member</th><th className="px-6 py-3 text-center">Level</th><th className="px-6 py-3">Joined</th><th className="px-6 py-3 text-right">Status</th></tr>
+                <thead className="bg-slate-50 text-slate-400 font-bold border-b border-slate-100 uppercase tracking-wider text-xs">
+                  <tr><th className="px-8 py-5">Member Details</th><th className="px-8 py-5 text-center">Generation Level</th><th className="px-8 py-5">Contact</th><th className="px-8 py-5 text-right">Status</th></tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {isLoading ? (
-                    <tr><td colSpan={4} className="px-6 py-10 text-center text-slate-400"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-amber-500" />Compiling directory…</td></tr>
-                  ) : flatTeam.length === 0 ? (
-                    <tr><td colSpan={4} className="px-6 py-14 text-center"><Users className="h-10 w-10 text-slate-200 mx-auto mb-2" /><p className="text-slate-400 text-sm">No downline members yet.</p></td></tr>
-                  ) : flatTeam.map((member) => (
-                    <tr key={member.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-600 font-bold text-sm shrink-0 border border-slate-200">{member.name.charAt(0).toUpperCase()}</div>
-                          <div><p className="font-bold text-slate-900 text-sm">{member.name}</p><p className="text-xs text-slate-400">ID #{member.id}</p></div>
+                <tbody className="divide-y divide-slate-100">
+                  {flatTeam.length === 0 ? <tr><td colSpan="4" className="px-8 py-16 text-center text-slate-500"><Users className="h-12 w-12 text-slate-200 mx-auto mb-3"/>Your network is currently empty.</td></tr>
+                  : flatTeam.map((member, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-8 py-6">
+                        <div className="flex items-center">
+                          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center text-emerald-700 text-xl font-black mr-4 shadow-inner border border-emerald-200">
+                            {member.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <span className="text-slate-900 font-black text-lg block leading-tight">{member.name}</span>
+                            <span className="text-xs font-bold text-slate-400 mt-1">ID: #{member.id} • Joined {new Date(member.joinDate).toLocaleDateString('en-IN')}</span>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-center"><span className="px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-lg font-bold text-xs">L{member.level}</span></td>
-                      <td className="px-6 py-4 text-slate-500 text-xs font-medium whitespace-nowrap">{new Date(member.joinDate).toLocaleDateString("en-IN")}</td>
-                      <td className="px-6 py-4 text-right"><span className={`px-3 py-1 text-xs font-bold rounded-lg border ${member.status === "Active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-500 border-slate-200"}`}>{member.status}</span></td>
+                      <td className="px-8 py-6 text-center"><span className="px-5 py-2 bg-slate-100 border border-slate-200 text-slate-700 rounded-xl font-black text-sm shadow-sm">Level {member.level}</span></td>
+                      <td className="px-8 py-6">
+                        <p className="font-bold text-slate-800 text-sm mb-1">{member.phone}</p>
+                        <p className="text-xs font-semibold text-slate-500">{member.email}</p>
+                      </td>
+                      <td className="px-8 py-6 text-right"><span className={`px-4 py-2 text-xs font-black rounded-xl uppercase tracking-wider border shadow-sm ${member.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{member.status}</span></td>
                     </tr>
                   ))}
                 </tbody>

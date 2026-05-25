@@ -3,11 +3,12 @@ import api from "./api";
 
 export const fetchNetworkData = async () => {
   try {
-    // 🔥 REPLACE these with your actual backend endpoints
+    // 🔥 FIXED: Removed the extra "/api" prefix
     const [teamRes, genealogyRes] = await Promise.all([
-      api.get("/api/team/me"),        // <-- Change this
-      api.get("/api/genealogy/me")    // <-- Change this
+      api.get("/team/me"),        
+      api.get("/genealogy/me")    
     ]);
+    
     return {
       success: true,
       totalCount: teamRes.data.total_team || 0,
@@ -15,19 +16,21 @@ export const fetchNetworkData = async () => {
       tree: genealogyRes.data.team_tree || []
     };
   } catch (error) {
+    console.error("Network data fetch error:", error);
     return { success: false, totalCount: 0, directTeam: [], tree: [] };
   }
 };
 
 export const fetchUplineData = async () => {
   try {
-    // 🔥 REPLACE with your actual upline endpoint
-    const res = await api.get("/api/team/upline"); // <-- Change this
+    // 🔥 FIXED: Removed the extra "/api" prefix
+    const res = await api.get("/team/upline"); 
     return {
       success: true,
       data: res.data || null
     };
   } catch (error) {
+    console.error("Upline fetch error:", error);
     return { success: false, data: null };
   }
 };
