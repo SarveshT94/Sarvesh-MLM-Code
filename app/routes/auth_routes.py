@@ -7,14 +7,16 @@ from app.services.user_service import (
     process_reset_password
 )
 import logging
-from app import limiter
+
+# 🔥 IMPORT OUR V2.0 ENTERPRISE TOOLS
+from app import limiter, executor
+from app.tasks import send_welcome_email_task
 
 # Logger setup
 logger = logging.getLogger(__name__)
 
 # Create the "Blueprint"
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
-
 
 # --- Enterprise Flask-Login Wrapper ---
 class AuthUser(UserMixin):
@@ -32,6 +34,7 @@ class AuthUser(UserMixin):
 # Secure Registration Route
 # -----------------------------------
 @auth_bp.route('/register', methods=['POST'])
+@limiter.limit("5 per minute")  # 🔥 Added Rate Limit to stop Bot Account Creation!
 def register():
     try:
         data = request.get_json()
@@ -54,7 +57,16 @@ def register():
 
         if result['status'] == 'success':
             logger.info(f"User registered: {clean_email}")
+            
+            # ==========================================================
+            # 🔥 V2.0 UPGRADE: FIRE BACKGROUND TASK
+            # This pushes the email logic to a separate thread so the 
+            # user instantly goes to the dashboard without waiting!
+            # ==========================================================
+            executor.submit(send_welcome_email_task, clean_email, data['full_name'])
+            
             return jsonify(result), 201
+            
         return jsonify(result), 400
 
     except Exception as e:
@@ -85,7 +97,10 @@ def login():
         if result['status'] == 'success':
             user_dict = result['user']
             user_obj = AuthUser(user_dict)
-            login_user(user_obj)
+            
+            # remember=True ensures the Next.js cookie survives closing the browser
+            login_user(user_obj, remember=True) 
+            
             session['user_id'] = user_dict['id']
             session['role_id'] = user_dict['role_id']
 

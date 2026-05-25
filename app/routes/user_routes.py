@@ -4,16 +4,62 @@ from app.services.kyc_service import submit_kyc
 from app.services.income_service import get_income_summary
 from app.services.rank_service import get_user_rank
 from app.services.epin_service import redeem_epin
-# BUG FIXED #10: was importing request_withdrawal from wallet_service — DOES NOT EXIST.
-# Correct function is create_withdraw_request in withdraw_service.
 from app.services.withdraw_service import create_withdraw_request
 from app.services.wallet_service import get_wallet_balance, get_wallet_history
+
+# 🔥 NEW IMPORTS FOR NETWORK & TEAM
+from app.services.team_service import get_total_team_count, get_level_1_team
+from app.services.admin.tree_service import get_user_tree
+from app.services.sponsor_service import get_sponsor_chain
+
 import logging
 
 logger = logging.getLogger(__name__)
 user_bp = Blueprint('user', __name__)
 
 
+# -----------------------------------
+# 1. NETWORK & TEAM ROUTES (THE 404 FIX)
+# -----------------------------------
+@user_bp.route('/team/me', methods=['GET'])
+@login_required
+def get_team_me():
+    try:
+        uid = current_user.id
+        return jsonify({
+            "total_team": get_total_team_count(uid),
+            "direct_team": get_level_1_team(uid)
+        }), 200
+    except Exception as e:
+        logger.error(f"Team API error: {str(e)}")
+        return jsonify({"status": "error", "message": "Failed to fetch team"}), 500
+
+@user_bp.route('/genealogy/me', methods=['GET'])
+@login_required
+def get_genealogy_me():
+    try:
+        uid = current_user.id
+        tree = get_user_tree(uid)
+        return jsonify({"team_tree": tree}), 200
+    except Exception as e:
+        logger.error(f"Genealogy API error: {str(e)}")
+        return jsonify({"status": "error", "message": "Failed to fetch tree"}), 500
+
+@user_bp.route('/team/upline', methods=['GET'])
+@login_required
+def get_upline_me():
+    try:
+        uid = current_user.id
+        chain = get_sponsor_chain(uid)
+        return jsonify(chain), 200
+    except Exception as e:
+        logger.error(f"Upline API error: {str(e)}")
+        return jsonify({"status": "error", "message": "Failed to fetch upline"}), 500
+
+
+# -----------------------------------
+# 2. WALLET ROUTES
+# -----------------------------------
 @user_bp.route('/wallet/balance', methods=['GET'])
 @login_required
 def fetch_my_balance():
@@ -43,9 +89,6 @@ def fetch_wallet_history():
 @user_bp.route('/wallet/withdraw', methods=['POST'])
 @login_required
 def process_withdrawal_request():
-    """
-    BUG FIXED #10: Now calls create_withdraw_request from withdraw_service.
-    """
     data   = request.get_json()
     amount = data.get('amount')
 
@@ -66,6 +109,9 @@ def process_withdrawal_request():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+# -----------------------------------
+# 3. OTHER USER ROUTES
+# -----------------------------------
 @user_bp.route('/kyc/submit', methods=['POST'])
 @login_required
 def upload_kyc_documents():

@@ -26,6 +26,7 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
+from flask_executor import Executor  # 🔥 NEW: IMPORT EXECUTOR
 
 # -----------------------------------
 # Logging Configuration
@@ -46,6 +47,8 @@ limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["200 per day", "50 per hour"]
 )
+
+executor = Executor()  # 🔥 NEW: INITIALIZE EXECUTOR
 
 # -----------------------------------
 # Enterprise User Wrapper
@@ -70,7 +73,26 @@ def create_app():
     if not app.config["SECRET_KEY"]:
         raise ValueError("SECRET_KEY is not set in environment variables")
 
+    # =======================================================
+    # 🔥 CRITICAL NEXT.JS AUTHENTICATION FIX
+    # This allows Flask to send login cookies to Next.js
+    # =======================================================
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+    app.config['SESSION_COOKIE_SECURE'] = True  # Required when SameSite is None
+
     limiter.init_app(app)
+
+    # =======================================================
+    # 🔥 INITIALIZE ENTERPRISE CACHING
+    # This connects the caching logic to prevent database overload
+    # =======================================================
+    from app.cache import cache
+    cache.init_app(app)
+
+    # =======================================================
+    # 🔥 START THE BACKGROUND TASK WORKER
+    # =======================================================
+    executor.init_app(app)
 
     csp = {
         'default-src': ['\'self\''],
@@ -82,7 +104,6 @@ def create_app():
 
     # =======================================================
     # 🔥 BULLETPROOF CORS CONFIGURATION
-    # This completely opens the bridge between Next.js and Flask
     # =======================================================
     CORS(
         app,
@@ -96,6 +117,10 @@ def create_app():
     from app.routes.auth_routes import auth_bp
     from app.routes.main import main
     from app.routes.admin_routes import admin
+    
+    # 🔥 ADDED: Import your user routes where the Network Tree APIs live
+    from app.routes.user_routes import user_bp 
+
     from app.routes.admin.tree_routes import admin_tree_bp
     from app.routes.admin.wallet_routes import admin_wallet_bp
     from app.routes.admin.commission_routes import admin_commission_bp
@@ -115,6 +140,10 @@ def create_app():
     app.register_blueprint(admin_package_bp)
     app.register_blueprint(profile_bp)
     app.register_blueprint(main)
+    
+    # 🔥 ADDED: Register the user routes under /api so /api/team/me works
+    app.register_blueprint(user_bp, url_prefix="/api")
+
     app.register_blueprint(admin, url_prefix="/api/admin")
     app.register_blueprint(admin_tree_bp, url_prefix="/api/admin/tree")
     app.register_blueprint(admin_wallet_bp, url_prefix="/api/admin/wallet")

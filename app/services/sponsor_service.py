@@ -17,6 +17,7 @@ def get_sponsor_chain(user_id, max_levels=10):
 
     try:
         with get_cursor() as cur:
+            # We join the users table here to get the actual names/emails for the UI
             cur.execute("""
                 WITH RECURSIVE upline AS (
                     SELECT sponsor_id, 1 AS level
@@ -30,16 +31,14 @@ def get_sponsor_chain(user_id, max_levels=10):
                     INNER JOIN upline ul ON u.id = ul.sponsor_id
                     WHERE u.sponsor_id IS NOT NULL AND ul.level < %s
                 )
-                SELECT sponsor_id 
-                FROM upline 
-                ORDER BY level ASC;
+                SELECT u.id as user_id, u.full_name, u.email, u.phone, u.is_active, ul.level
+                FROM upline ul
+                JOIN users u ON ul.sponsor_id = u.id
+                ORDER BY ul.level ASC;
             """, (user_id, max_levels))
 
-            results = cur.fetchall()
-
-            sponsor_chain = [row['sponsor_id'] for row in results]
-
-            return sponsor_chain
+            # Fetch all details as dictionaries, not just a list of IDs
+            return cur.fetchall()
 
     except Exception as e:
         logger.error(f"Sponsor chain error | user={user_id} | error={str(e)}")

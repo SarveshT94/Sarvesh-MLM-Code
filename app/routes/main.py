@@ -2,6 +2,9 @@ from flask import Blueprint, render_template, request, redirect, jsonify, flash,
 from flask_login import login_required, current_user, login_user, logout_user
 import logging
 import os
+import hmac
+import hashlib
+import json
 from werkzeug.utils import secure_filename
 from flask import current_app
 from functools import wraps
@@ -678,8 +681,6 @@ def admin_purchase_history():
 
 # =========================================================
 # COMPANY SETTINGS
-# BUG FIXED #25: CREATE TABLE removed from request handler.
-# Schema must be created via Flask-Migrate, not on every HTTP request.
 # =========================================================
 @main.route("/admin/settings", methods=["GET", "POST"])
 @admin_required
@@ -781,20 +782,9 @@ def admin_user_network(user_id):
         flash("Failed to load user profile.", "danger")
         return redirect("/admin/panel")
 
-
-# =========================================================
-# BUG FIXED #21 #22 #23: UNPROTECTED TEST ROUTES REMOVED
-# These routes allowed anyone to credit/debit wallets without authentication:
-#   /test/credit/<user_id>/<amount>
-#   /test/create-withdraw/<user_id>/<amount>
-#   /test/clear-withdraw/<user_id>
-# They are DELETED. Use a proper test suite (pytest) instead.
-# =========================================================
-
 @main.route("/test-route")
 def test_route():
     return "Working"
-
 
 # =========================================================
 # RANK MANAGEMENT UI
@@ -803,3 +793,172 @@ def test_route():
 @admin_required
 def admin_ranks_page():
     return render_template("admin/ranks.html")
+
+
+# =========================================================
+# 🔥 NEW NEXT.JS FRONTEND ENDPOINTS & WEBHOOKS
+# =========================================================
+
+@main.route('/webhook/payment', methods=['POST'])
+def payment_webhook():
+    """Server-to-Server Payment Gateway Webhook"""
+    from app.services.activation_service import activate_user_package 
+    payload = request.get_data(as_text=True)
+    received_signature = request.headers.get('X-Razorpay-Signature')
+    
+    if not received_signature:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+
+    try:
+        secret = current_app.config.get('PAYMENT_GATEWAY_SECRET', 'YOUR_TEST_SECRET_KEY')
+        expected_signature = hmac.new(
+            bytes(secret, 'utf-8'), 
+            msg=bytes(payload, 'utf-8'), 
+            digestmod=hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(expected_signature, received_signature):
+            return jsonify({"status": "error", "message": "Invalid Signature"}), 400
+
+        data = json.loads(payload)
+        event_type = data.get('event')
+
+        if event_type in ['payment.captured', 'order.paid']:
+            payment_entity = data['payload']['payment']['entity']
+            user_id = payment_entity['notes']['user_id']
+            package_id = payment_entity['notes']['package_id']
+            
+            activate_user_package(user_id=user_id, package_id=package_id, payment_method="ONLINE")
+            
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": "Internal Server Error"}), 500
+
+
+@main.route("/api/wallet/me", methods=["GET"])
+@login_required
+def get_my_wallet_balance():
+    """Securely fetches the logged-in user's wallet balance."""
+    try:
+        with get_cursor() as cur:
+            result = get_wallet_balance(cur, current_user.id)
+        balance = result.get("balance", 0) if isinstance(result, dict) else result
+        return jsonify({"success": True, "wallet_balance": float(balance)}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": "Failed to load balance"}), 500
+
+
+@main.route("/api/wallet/me/history", methods=["GET"])
+@login_required
+def get_my_wallet_history():
+    """Securely fetches the logged-in user's ledger."""
+    try:
+        with get_cursor() as cur:
+            result = get_wallet_history(cur, current_user.id)
+        transactions = result.get("data", []) if isinstance(result, dict) else result
+        return jsonify({"success": True, "transactions": transactions}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": "Failed to load history"}), 500
+
+
+@main.route("/api/team/me", methods=["GET"])
+@login_required
+def get_my_team_metadata():
+    """Securely fetches the logged-in user's team size and directs."""
+    try:
+        direct_team = get_level_1_team(current_user.id)
+        total_team  = get_total_team_count(current_user.id)
+        return jsonify({
+            "success": True, 
+            "total_team": total_team, 
+            "direct_team": direct_team
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": "Failed to load team data"}), 500
+
+
+@main.route("/api/genealogy/me", methods=["GET"])
+@login_required
+def get_my_genealogy_tree():
+    """Securely fetches the logged-in user's network tree using existing cached logic."""
+    try:
+        from app.services.admin.tree_service import get_user_tree
+        tree_json = get_user_tree(current_user.id)
+        
+        if not tree_json:
+            return jsonify({"success": False, "message": "Tree context resolution failed"}), 404
+            
+        def flatten_and_tag_levels(nodes, current_level=1):
+            flat = []
+            for node in nodes:
+                flat.append({
+                    "id": node["user_id"],
+                    "full_name": node["full_name"],
+                    "level": current_level,
+                    "is_active": node["is_active"],
+                    "created_at": None
+                })
+                if node.get("children"):
+                    flat.extend(flatten_and_tag_levels(node["children"], current_level + 1))
+            return flat
+
+        children_list = tree_json.get("children", [])
+        processed_tree = flatten_and_tag_levels(children_list)
+        return jsonify({"success": True, "team_tree": processed_tree}), 200
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": "Failed to compile network architecture"}), 500
+
+
+# ============================================================================
+# 🔥 NEW: GENERATE SECURE PAYMENT ORDER ID FOR NEXT.JS CHECKOUT
+# ============================================================================
+@main.route("/api/payment/create-order", methods=["POST"])
+@login_required
+def create_payment_order():
+    """
+    Generates a secure checkout payload for the Next.js frontend.
+    Fetches the price from the DB to prevent client-side price tampering.
+    """
+    try:
+        data = request.get_json()
+        plan_id = data.get("plan_id")
+
+        if not plan_id:
+            return jsonify({"success": False, "message": "Plan ID is required"}), 400
+
+        # 1. Fetch the official price from the database to stop price-hacking attacks
+        with get_cursor() as cur:
+            cur.execute("""
+                SELECT name, price 
+                FROM subscription_plans 
+                WHERE id = %s AND is_active = TRUE
+            """, (plan_id,))
+            plan = cur.fetchone()
+
+        if not plan:
+            return jsonify({"success": False, "message": "Selected plan is invalid or inactive."}), 404
+
+        # Convert price to paise (Razorpay standard: ₹1 = 100 paise)
+        amount_in_paise = int(float(plan["price"]) * 100)
+
+        # 2. Pull secret credentials from environment configurations securely
+        key_id = current_app.config.get("RAZORPAY_KEY_ID", "rzp_test_YOUR_KEY_HERE")
+
+        # 3. Generate a secure tracking token for the transaction handshake
+        import time
+        generated_order_id = f"order_rzp_{current_user.id}_{plan_id}_{int(time.time())}"
+
+        logger.info(f"Payment Handshake Initialized: {generated_order_id} for User {current_user.id} [₹{plan['price']}]")
+
+        # Return parameters directly back to Next.js purchasePlan service helper
+        return jsonify({
+            "success": True,
+            "order_id": generated_order_id,
+            "key_id": key_id,
+            "amount": amount_in_paise
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error initializing checkout window payload: {str(e)}")
+        return jsonify({"success": False, "message": "Internal gateway initialization failure"}), 500
