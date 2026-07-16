@@ -1,5 +1,9 @@
 from yoyo import step
 
+
+__depends__ = {"0002_create_mvp_core_schema"}
+
+
 # We use IF NOT EXISTS to prevent crashes if you ever run this twice
 steps = [
     step(
