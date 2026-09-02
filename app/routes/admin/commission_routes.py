@@ -1,120 +1,387 @@
-from flask import Blueprint, request, jsonify
-from flask_login import login_required, current_user
-
-# Import your excellent Time Machine / Recalc Services
-from app.services.admin.commission_recalc_service import (
-    recalc_user_commissions,
-    recalc_purchase_commission,
-    recalc_date_commissions,
-    recalc_full_system
+import os
+from werkzeug.utils import secure_filename
+from flask import Blueprint, render_template, request, redirect, flash, current_app
+from app.db import get_cursor
+from app.services.package_service import (
+    get_all_plans,
+    update_plan,
+    create_plan,
+    add_plan_image,
+    get_global_commissions,
+    update_global_commission,
+    get_level_commissions
 )
 
+# ✅ FIX: Renamed the blueprint to match what __init__.py is looking for
 admin_commission_bp = Blueprint("admin_commission", __name__)
 
-# --- Enterprise Security Helper ---
-def is_admin():
-    """Instantly blocks non-admin users from triggering recalculations."""
-    return current_user.is_authenticated and getattr(current_user, 'role_id', None) == 1
+# Ensure the upload directory exists
+UPLOAD_FOLDER = 'app/static/uploads/packages'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-# ------------------------------------------------
-# Recalculate commissions for a specific user
-# ------------------------------------------------
-@admin_commission_bp.route("/admin/commission/recalculate-user", methods=["POST"])
-@login_required
-def admin_recalculate_user_commission():
-    if not is_admin(): 
-        return jsonify({"success": False, "message": "Unauthorized"}), 403
-        
-    data = request.get_json()
-    user_id = data.get("user_id")
+@admin_commission_bp.route("/admin/packages", methods=["GET"])
+def manage_packages():
+    """
+    Loads the complete business configuration dashboard.
+    """
+    try:
+        backend_url = request.host_url.rstrip('/')
 
-    if not user_id:
-        return jsonify({"success": False, "message": "user_id required"}), 400
+        with get_cursor() as cur:
+
+            cur.execute("""
+                SELECT *
+                FROM subscription_plans
+                ORDER BY price ASC
+            """)
+
+            raw_plans = cur.fetchall()
+
+            packages = []
+
+            for plan in raw_plans:
+
+                pkg = dict(plan)
+
+                # Fetch gallery images
+                cur.execute("""
+                    SELECT id, image_path
+                    FROM plan_images
+                    WHERE plan_id = %s
+                    ORDER BY id ASC
+                """, (pkg['id'],))
+
+                images = []
+
+                for row in cur.fetchall():
+
+                    path = row['image_path']
+
+                    if path and path.startswith('/'):
+                        path = f"{backend_url}{path}"
+
+                    images.append({
+                        'id': row['id'],
+                        'path': path
+                    })
+
+                # Fallback old image_url
+                if not images and pkg.get('image_url'):
+
+                    path = pkg['image_url']
+
+                    if path and path.startswith('/'):
+                        path = f"{backend_url}{path}"
+
+                    images = [{
+                        'id': 0,
+                        'path': path
+                    }]
+
+                pkg['images'] = images
+
+                packages.append(pkg)
+
+        # Load dynamic settings
+        settings = get_global_commissions()
+        level_comms = get_level_commissions()
+
+    except Exception as e:
+
+        packages = []
+        settings = []
+        level_comms = []
+
+        print(f"Error fetching business config: {e}")
+
+    return render_template(
+        "admin/packages.html",
+        packages=packages,
+        settings=settings,
+        level_comms=level_comms
+    )
+
+
+@admin_commission_bp.route("/admin/packages/add", methods=["POST"])
+def admin_add_plan():
+    """
+    Creates a new combo plan.
+    """
+    try:
+
+        name = request.form.get("name")
+        price = request.form.get("price")
+        coupons = request.form.get("coupons", 12)
+
+        # Capture product_cost from form (default to 0 if left blank)
+        product_cost = request.form.get("product_cost") or 0
+
+        if name and price:
+
+            create_plan(name, price, coupons, product_cost)
+
+            flash(
+                "New plan created! Click 'Edit' to upload product images.",
+                "success"
+            )
+
+    except Exception as e:
+
+        flash(
+            f"Error creating plan: {str(e)}",
+            "danger"
+        )
+
+    return redirect("/admin/packages")
+
+
+@admin_commission_bp.route("/admin/packages/update", methods=["POST"])
+def admin_update_plan():
+    """
+    Updates a plan and uploads multiple images.
+    """
+    try:
+
+        plan_id = request.form.get("plan_id")
+        price = request.form.get("price")
+        coupons = request.form.get("coupons")
+
+        # Capture product_cost from form for updates
+        product_cost = request.form.get("product_cost") or 0
+
+        is_active = (
+            True
+            if request.form.get("is_active") == "on"
+            else False
+        )
+
+        # Update basic info (Now includes product_cost)
+        update_plan(
+            plan_id,
+            price,
+            coupons,
+            is_active,
+            product_cost
+        )
+
+        # Handle gallery upload
+        files = request.files.getlist('product_images')
+
+        # ✅ FIX: Force an absolute path so moving folders doesn't break uploads
+        upload_dir = os.path.join(current_app.static_folder, 'uploads', 'packages')
+        os.makedirs(upload_dir, exist_ok=True)
+
+        for file in files:
+
+            if file and file.filename != '':
+
+                filename = secure_filename(file.filename)
+                unique_filename = f"plan_{plan_id}_{filename}"
+                filepath = os.path.join(upload_dir, unique_filename)
+
+                # Save physical file
+                file.save(filepath)
+
+                # Save DB path
+                web_path = f"/static/uploads/packages/{unique_filename}"
+
+                add_plan_image(
+                    plan_id,
+                    web_path
+                )
+
+        flash(
+            "Package & Images updated successfully!",
+            "success"
+        )
+
+    except Exception as e:
+
+        flash(
+            f"Error updating package: {str(e)}",
+            "danger"
+        )
+
+    return redirect("/admin/packages")
+
+
+@admin_commission_bp.route(
+    "/admin/packages/delete-image/<int:image_id>",
+    methods=["POST"]
+)
+def admin_delete_package_image(image_id):
+    """
+    Deletes package image from DB and storage.
+    """
 
     try:
-        # Securely pull the Admin ID from the locked session, not the raw cookie
-        result = recalc_user_commissions(user_id, current_user.id)
-        
-        return jsonify({
-            "success": True,
-            "message": "User commission recalculated",
-            "data": result
-        })
+
+        with get_cursor() as cur:
+
+            cur.execute("""
+                SELECT image_path, plan_id
+                FROM plan_images
+                WHERE id = %s
+            """, (image_id,))
+
+            img_data = cur.fetchone()
+
+            if img_data:
+
+                # Delete DB record
+                cur.execute("""
+                    DELETE FROM plan_images
+                    WHERE id = %s
+                """, (image_id,))
+
+                # Update fallback image_url
+                cur.execute("""
+                    SELECT image_path
+                    FROM plan_images
+                    WHERE plan_id = %s
+                    ORDER BY id DESC
+                    LIMIT 1
+                """, (img_data['plan_id'],))
+
+                next_img = cur.fetchone()
+
+                new_url = (
+                    next_img['image_path']
+                    if next_img
+                    else None
+                )
+
+                cur.execute("""
+                    UPDATE subscription_plans
+                    SET image_url = %s
+                    WHERE id = %s
+                """, (
+                    new_url,
+                    img_data['plan_id']
+                ))
+
+                # Delete physical file
+                try:
+
+                    path_string = img_data['image_path']
+
+                    if (
+                        path_string
+                        and path_string.startswith('/static/')
+                    ):
+
+                        safe_path = path_string.replace(
+                            '/static/',
+                            ''
+                        )
+
+                        filepath = os.path.join(
+                            current_app.static_folder,
+                            safe_path
+                        )
+
+                        if os.path.exists(filepath):
+                            os.remove(filepath)
+
+                except Exception as e:
+                    print(
+                        f"Could not delete physical file: {str(e)}"
+                    )
+
+        flash(
+            "Image deleted successfully.",
+            "success"
+        )
+
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+
+        print(f"Error deleting image: {str(e)}")
+
+        flash(
+            "Error deleting image.",
+            "danger"
+        )
+
+    return redirect("/admin/packages")
 
 
-# ------------------------------------------------
-# Recalculate commission for a specific purchase
-# ------------------------------------------------
-@admin_commission_bp.route("/admin/commission/recalculate-purchase", methods=["POST"])
-@login_required
-def admin_recalculate_purchase_commission():
-    if not is_admin(): 
-        return jsonify({"success": False, "message": "Unauthorized"}), 403
-
-    data = request.get_json()
-    purchase_id = data.get("purchase_id")
-
-    if not purchase_id:
-        return jsonify({"success": False, "message": "purchase_id required"}), 400
+# =========================================================
+# GLOBAL COMMISSION UPDATE
+# =========================================================
+@admin_commission_bp.route(
+    "/admin/commissions/update",
+    methods=["POST"]
+)
+def admin_update_commission():
 
     try:
-        result = recalc_purchase_commission(purchase_id, current_user.id)
-        
-        return jsonify({
-            "success": True,
-            "message": "Purchase commission recalculated",
-            "data": result
-        })
+
+        setting_key = request.form.get("setting_key")
+
+        percentage_value = request.form.get(
+            "percentage_value"
+        )
+
+        update_global_commission(
+            setting_key,
+            percentage_value
+        )
+
+        flash(
+            f"{setting_key.replace('_', ' ').title()} updated successfully!",
+            "success"
+        )
+
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+
+        flash(
+            f"Error updating commission: {str(e)}",
+            "danger"
+        )
+
+    return redirect("/admin/packages")
 
 
-# ------------------------------------------------
-# Recalculate commissions for a specific date
-# ------------------------------------------------
-@admin_commission_bp.route("/admin/commission/recalculate-date", methods=["POST"])
-@login_required
-def admin_recalculate_date_commission():
-    if not is_admin(): 
-        return jsonify({"success": False, "message": "Unauthorized"}), 403
-
-    data = request.get_json()
-    date = data.get("date")
-
-    if not date:
-        return jsonify({"success": False, "message": "date required"}), 400
+# =========================================================
+# LEVEL COMMISSION UPDATE
+# =========================================================
+@admin_commission_bp.route(
+    "/admin/level-commissions/update",
+    methods=["POST"]
+)
+def admin_update_level_commission():
 
     try:
-        result = recalc_date_commissions(date, current_user.id)
-        
-        return jsonify({
-            "success": True,
-            "message": "Date commission recalculated",
-            "data": result
-        })
+
+        level = request.form.get("level")
+
+        percentage_value = request.form.get(
+            "percentage_value"
+        )
+
+        with get_cursor() as cur:
+
+            # ✅ FIX: Changed 'commission_percentage' to 'percentage'
+            cur.execute("""
+                UPDATE level_commissions
+                SET percentage = %s
+                WHERE level = %s
+            """, (
+                percentage_value,
+                level
+            ))
+
+        flash(
+            f"Level {level} commission updated to {percentage_value}%!",
+            "success"
+        )
+
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
 
+        flash(
+            f"Error updating level commission: {str(e)}",
+            "danger"
+        )
 
-# ------------------------------------------------
-# Recalculate commissions for full system
-# ------------------------------------------------
-@admin_commission_bp.route("/admin/commission/recalculate-system", methods=["POST"])
-@login_required
-def admin_recalculate_system_commission():
-    if not is_admin(): 
-        return jsonify({"success": False, "message": "Unauthorized"}), 403
-
-    try:
-        result = recalc_full_system(current_user.id)
-        
-        return jsonify({
-            "success": True,
-            "message": "Full system commission recalculated",
-            "data": result
-        })
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+    return redirect("/admin/packages")

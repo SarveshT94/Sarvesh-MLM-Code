@@ -21,9 +21,9 @@ def init_db_pool():
             #
             # Why 20 was a critical problem:
             # ┌──────────────────────────────────────────────────────────────┐
-            # │  Gunicorn workers  : 9  (4 CPU × 2 + 1)                     │
-            # │  Gevent greenlets  : 1000 per worker                        │
-            # │  Old pool max      : 20  ← exhausted by first ~20 requests  │
+            # │  Gunicorn workers  : 9  (4 CPU × 2 + 1)                      │
+            # │  Gevent greenlets  : 1000 per worker                         │
+            # │  Old pool max      : 20  ← exhausted by first ~20 requests   │
             # │  Result            : All remaining requests hang or crash    │
             # └──────────────────────────────────────────────────────────────┘
             #
@@ -108,6 +108,7 @@ def get_cursor():
 
     conn   = _connection_pool.getconn()
     cursor = None
+    error_occurred = False
 
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -115,6 +116,7 @@ def get_cursor():
         conn.commit()
 
     except Exception as e:
+        error_occurred = True
         conn.rollback()
         logger.error(f"DB transaction rolled back: {str(e)}")
         raise
@@ -122,4 +124,5 @@ def get_cursor():
     finally:
         if cursor:
             cursor.close()
-        _connection_pool.putconn(conn)
+        # FIX: Closes broken connections safely instead of returning them to the pool
+        _connection_pool.putconn(conn, close=error_occurred)

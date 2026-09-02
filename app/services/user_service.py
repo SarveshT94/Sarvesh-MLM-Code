@@ -211,13 +211,3 @@ def process_reset_password(token, new_password):
         logger.error(f"Reset password error: {str(e)}")
         return {"status": "error", "message": "An error occurred while resetting your password."}
 
-# -----------------------------------
-# Admin Users Pagination
-# -----------------------------------
-def get_users_paginated(limit=50, offset=0):
-    with get_cursor() as cur:
-        cur.execute("""
-            SELECT id, full_name, email, phone, is_active, created_at
-            FROM users ORDER BY created_at DESC LIMIT %s OFFSET %s
-        """, (limit, offset))
-        return cur.fetchall()

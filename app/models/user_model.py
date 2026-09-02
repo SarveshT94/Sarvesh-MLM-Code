@@ -3,11 +3,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# -----------------------------------
-# Get user by email
-# -----------------------------------
 def get_user_by_email(email):
-    """Fetch a user by their email address."""
     try:
         email = email.lower().strip()
         with get_cursor() as cur:
@@ -17,12 +13,7 @@ def get_user_by_email(email):
         logger.error(f"Error fetching user by email: {str(e)}")
         return None
 
-
-# -----------------------------------
-# Get user by phone
-# -----------------------------------
 def get_user_by_phone(phone):
-    """Fetch a user by their phone number."""
     try:
         phone = phone.strip()
         with get_cursor() as cur:
@@ -32,12 +23,7 @@ def get_user_by_phone(phone):
         logger.error(f"Error fetching user by phone: {str(e)}")
         return None
 
-
-# -----------------------------------
-# Get user by referral code
-# -----------------------------------
 def get_user_by_referral_code(referral_code):
-    """Fetch a user by their unique referral code."""
     try:
         with get_cursor() as cur:
             cur.execute("SELECT * FROM users WHERE referral_code = %s", (referral_code,))
@@ -46,14 +32,7 @@ def get_user_by_referral_code(referral_code):
         logger.error(f"Error fetching user by referral code: {str(e)}")
         return None
 
-
-# -----------------------------------
-# Create new user (Enterprise Safe)
-# -----------------------------------
 def create_user(role_id, full_name, email, phone, password_hash, referral_code, sponsor_id):
-    """
-    Creates a new user. The global get_cursor() handles the commit automatically.
-    """
     try:
         email = email.lower().strip()
         phone = phone.strip()
@@ -64,18 +43,18 @@ def create_user(role_id, full_name, email, phone, password_hash, referral_code, 
                 (role_id, full_name, email, phone, password_hash, referral_code, sponsor_id)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
-            """, (
-                role_id, full_name, email, phone, password_hash, referral_code, sponsor_id
-            ))
-
+            """, (role_id, full_name, email, phone, password_hash, referral_code, sponsor_id))
+            
             row = cur.fetchone()
-            # Safely grab the ID whether it returns as a Dictionary or a Tuple
+            # FIX: Prevent TypeError if row is None (e.g. duplicate constraint violation)
+            if not row:
+                return None
+                
             new_user_id = row['id'] if isinstance(row, dict) else row[0]
 
-        logger.info(f"User created successfully and permanently saved: {email}")
+        logger.info(f"User created successfully: {email}")
         return new_user_id
 
     except Exception as e:
         logger.error(f"Error creating user: {str(e)}")
         return None
-

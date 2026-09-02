@@ -8,27 +8,21 @@ logger = logging.getLogger(__name__)
 # 🛡️ BULLETPROOF BALANCE CALCULATION
 # =========================================================
 def _calculate_balance(cur, user_id):
+    # THE FIX: Universally subtracts anything with 'debit' and adds everything else.
+    # Note: We use '%%debit%%' with double percentages to escape them so psycopg2 
+    # doesn't confuse them with the %s parameter placeholder!
     cur.execute("""
-        SELECT amount, transaction_type 
+        SELECT COALESCE(SUM(
+            CASE 
+                WHEN LOWER(transaction_type) LIKE '%%debit%%' THEN -ABS(amount)
+                ELSE ABS(amount)
+            END
+        ), 0) AS balance
         FROM wallet_ledger 
         WHERE user_id = %s
     """, (user_id,))
     
-    balance = Decimal('0.00')
-    
-    for row in cur.fetchall():
-        # Ledger now stores negative values for debits, so a simple SUM works,
-        # but we keep this logic for safety across different t_types.
-        amt = Decimal(str(row['amount'])) if row['amount'] is not None else Decimal('0.00')
-        t_type = str(row['transaction_type']).lower() if row['transaction_type'] else ''
-        
-        # We check both the sign and the type string for absolute safety
-        if amt > 0:
-            balance += amt
-        else:
-            balance += amt # Adding a negative number correctly subtracts
-            
-    return balance
+    return Decimal(str(cur.fetchone()['balance']))
 
 # =========================================================
 # PUBLIC BALANCE
@@ -74,7 +68,7 @@ def get_wallet_history(cur, user_id):
         return {"status": "error", "message": str(e), "data": []}
 
 # =========================================================
-# CORE LEDGER ENGINE (REPAIRED FOR NEGATIVE DEBITS)
+# CORE LEDGER ENGINE 
 # =========================================================
 def _create_ledger_entry(cur, user_id, amount, txn_type, reference, description):
     # Idempotency check
@@ -91,7 +85,6 @@ def _create_ledger_entry(cur, user_id, amount, txn_type, reference, description)
     if txn_type == "debit" and current_balance < amt_decimal:
         raise Exception("Insufficient balance")
 
-    # 🔥 THE FIX: Store debits as negative numbers so SQL SUM() works correctly
     stored_amount = amt_decimal if txn_type == "credit" else -abs(amt_decimal)
     closing_balance = current_balance + stored_amount
 

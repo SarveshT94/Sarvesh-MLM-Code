@@ -29,9 +29,6 @@ def get_all_users(limit=100):
     return users
 
 
-from app.db import get_cursor
-
-
 # ------------------------------------------------
 # ACTIVATE USER
 # ------------------------------------------------
@@ -60,9 +57,8 @@ def deactivate_user(user_id):
             (user_id,)
         )
 
-        print("Rows Updated:", cur.rowcount)
-
     return True
+
 
 # ---------------------------------------------------
 # SEARCH USERS

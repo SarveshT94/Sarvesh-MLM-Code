@@ -1,36 +1,39 @@
 from app.db import get_cursor
-from app.services.commission_engine import distribute_commission
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def process_daily_commissions():
     """
-    Daily Commission Automation
+    DAILY COMMISSION JOB
+
+    TEMPORARILY DISABLED.
+
+    Reason:
+    Old implementation was using:
+
+        distribute_commission(user_id, 100)
+
+    which hardcoded package_id=100 for every active user.
+
+    This could generate:
+    - duplicate commissions
+    - fake payouts
+    - wallet inflation
+    - financial inconsistencies
+
+    The job will remain disabled until:
+    - cron logic is audited
+    - recurring income rules are confirmed
+    - package mapping is validated
     """
 
-    processed = 0
+    logger.warning(
+        "process_daily_commissions() is temporarily disabled for safety."
+    )
 
-    with get_cursor() as cur:
-
-        cur.execute("""
-            SELECT id
-            FROM users
-            WHERE is_active = TRUE
-        """)
-
-        users = cur.fetchall()
-
-    for user in users:
-
-        user_id = user["id"]
-
-        try:
-
-            distribute_commission(user_id, 100)
-
-            processed += 1
-
-        except Exception as e:
-
-            print("Commission Error:", user_id, str(e))
-
-    return processed
+    return {
+        "status": "disabled",
+        "processed": 0
+    }

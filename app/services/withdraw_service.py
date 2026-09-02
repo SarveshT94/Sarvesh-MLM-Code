@@ -8,141 +8,351 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def create_withdraw_request(user_id, amount, payout_method="bank", payout_details=""):
+# =========================================================
+# CREATE WITHDRAW REQUEST
+# =========================================================
+def create_withdraw_request(
+    user_id,
+    amount,
+    payout_method="bank",
+    payout_details=""
+):
     try:
         amount = Decimal(str(amount))
+
         if amount <= 0:
-            return {"success": False, "message": "Invalid withdraw amount"}
+            return {
+                "success": False,
+                "message": "Invalid withdraw amount"
+            }
 
         with get_cursor() as cur:
-            cur.execute("SELECT id FROM users WHERE id = %s FOR UPDATE", (user_id,))
+
+            # Lock user row
+            cur.execute(
+                "SELECT id FROM users WHERE id = %s FOR UPDATE",
+                (user_id,)
+            )
 
             balance_data = get_wallet_balance(cur, user_id)
-            current_balance = Decimal(str(balance_data.get("balance", 0)))
+
+            current_balance = Decimal(
+                str(balance_data.get("balance", 0))
+            )
 
             if current_balance < amount:
-                return {"success": False, "message": "Insufficient balance"}
+                return {
+                    "success": False,
+                    "message": "Insufficient balance"
+                }
 
+            # Prevent multiple pending requests
             cur.execute("""
-                SELECT id FROM withdraw_requests
-                WHERE user_id = %s AND status = 'pending' LIMIT 1
+                SELECT id
+                FROM withdraw_requests
+                WHERE user_id = %s
+                AND status = 'pending'
+                LIMIT 1
             """, (user_id,))
+
             if cur.fetchone():
-                return {"success": False, "message": "A pending request already exists"}
+                return {
+                    "success": False,
+                    "message": "A pending request already exists"
+                }
 
             cur.execute("""
                 INSERT INTO withdraw_requests
-                (user_id, amount, payout_method, payout_details, status)
+                (
+                    user_id,
+                    amount,
+                    payout_method,
+                    payout_details,
+                    status
+                )
                 VALUES (%s, %s, %s, %s, 'pending')
                 RETURNING id
-            """, (user_id, amount, payout_method, payout_details))
+            """, (
+                user_id,
+                amount,
+                payout_method,
+                payout_details
+            ))
+
             request_id = cur.fetchone()["id"]
 
-            log_action(action="withdraw_request_created", user_id=user_id,
-                       metadata={"amount": str(amount), "request_id": request_id,
-                                 "payout_method": payout_method})
+            log_action(
+                action="withdraw_request_created",
+                user_id=user_id,
+                metadata={
+                    "amount": str(amount),
+                    "request_id": request_id,
+                    "payout_method": payout_method
+                }
+            )
 
-        return {"success": True, "request_id": request_id,
-                "message": "Withdrawal requested successfully!"}
+        return {
+            "success": True,
+            "request_id": request_id,
+            "message": "Withdrawal requested successfully!"
+        }
 
     except Exception as e:
         logger.error(f"Withdraw request failed: {str(e)}")
         raise
 
 
+# =========================================================
+# GET WITHDRAW REQUESTS
+# FULLY DYNAMIC SETTINGS-BASED VERSION
+# =========================================================
 def get_withdraw_requests(limit=100, offset=0):
+
     try:
         with get_cursor() as cur:
+
+            # -------------------------------------------------
+            # LOAD WITHDRAW REQUESTS
+            # -------------------------------------------------
             cur.execute("""
                 SELECT
-                    wr.id, wr.user_id, wr.amount, wr.status,
-                    wr.requested_at, wr.payout_method, wr.payout_details,
-                    u.full_name, u.phone,
-                    (wr.amount * 0.02)                                  AS tds_amount,
-                    (wr.amount * 0.05)                                  AS admin_fee,
-                    (wr.amount - (wr.amount * 0.02) - (wr.amount * 0.05)) AS net_payable
+                    wr.id,
+                    wr.user_id,
+                    wr.amount,
+                    wr.status,
+                    wr.requested_at,
+                    wr.processed_at,
+                    wr.payout_method,
+                    wr.payout_details,
+                    wr.admin_note,
+                    u.full_name,
+                    u.phone
                 FROM withdraw_requests wr
-                JOIN users u ON u.id = wr.user_id
+                JOIN users u
+                    ON u.id = wr.user_id
                 ORDER BY wr.requested_at DESC
                 LIMIT %s OFFSET %s
             """, (limit, offset))
-            return cur.fetchall()
+
+            requests = cur.fetchall()
+
+            # -------------------------------------------------
+            # LOAD GLOBAL SETTINGS DYNAMICALLY
+            # -------------------------------------------------
+            cur.execute("""
+                SELECT
+                    setting_key,
+                    percentage_value
+                FROM global_commissions
+            """)
+
+            settings = {
+                row["setting_key"]: Decimal(
+                    str(row["percentage_value"])
+                )
+                for row in cur.fetchall()
+            }
+
+            # Dynamic percentages
+            tds_rate = settings.get(
+                "tds_percentage",
+                Decimal("0")
+            )
+
+            # ✅ FIX: Updated the dictionary key to match your database exactly
+            admin_rate = settings.get(
+                "admin_fee_percentage",
+                Decimal("0")
+            )
+
+            # -------------------------------------------------
+            # APPLY DYNAMIC CALCULATIONS
+            # -------------------------------------------------
+            for req in requests:
+
+                amount = Decimal(str(req["amount"]))
+
+                tds_amount = (
+                    amount * tds_rate / 100
+                ).quantize(Decimal("0.01"))
+
+                admin_fee = (
+                    amount * admin_rate / 100
+                ).quantize(Decimal("0.01"))
+
+                net_payable = (
+                    amount - tds_amount - admin_fee
+                ).quantize(Decimal("0.01"))
+
+                req["tds_rate"] = tds_rate
+                req["admin_rate"] = admin_rate
+
+                req["tds_amount"] = tds_amount
+                req["admin_fee"] = admin_fee
+                req["net_payable"] = net_payable
+
+            return requests
+
     except Exception as e:
         logger.error(f"Withdraw fetch error: {str(e)}")
         return []
 
 
+# =========================================================
+# APPROVE WITHDRAW
+# =========================================================
 def approve_withdraw(request_id, admin_id=None):
+
     try:
         with get_cursor() as cur:
+
             cur.execute("""
-                SELECT user_id, amount, status
-                FROM withdraw_requests WHERE id = %s FOR UPDATE
+                SELECT
+                    user_id,
+                    amount,
+                    status
+                FROM withdraw_requests
+                WHERE id = %s
+                FOR UPDATE
             """, (request_id,))
+
             request_data = cur.fetchone()
 
-            if not request_data or request_data["status"] != "pending":
-                raise Exception("Request not found or already processed")
+            if (
+                not request_data
+                or request_data["status"] != "pending"
+            ):
+                raise Exception(
+                    "Request not found or already processed"
+                )
 
             user_id = request_data["user_id"]
-            amount  = Decimal(str(request_data["amount"]))
 
+            amount = Decimal(
+                str(request_data["amount"])
+            )
+
+            # -------------------------------------------------
+            # FRAUD CHECK
+            # -------------------------------------------------
             risk = calculate_user_risk_score(user_id)
+
             if risk["risk_level"] == "high":
-                raise Exception(f"High risk user: {risk['reasons']}")
+                raise Exception(
+                    f"High risk user: {risk['reasons']}"
+                )
 
-            debit_wallet(cur, user_id, amount,
-                         reference=f"withdraw_{request_id}",
-                         description="Withdraw approved")
+            # -------------------------------------------------
+            # DEBIT WALLET
+            # -------------------------------------------------
+            debit_wallet(
+                cur,
+                user_id,
+                amount,
+                reference=f"withdraw_{request_id}",
+                description="Withdraw approved"
+            )
 
+            # -------------------------------------------------
+            # UPDATE REQUEST STATUS
+            # -------------------------------------------------
             cur.execute("""
                 UPDATE withdraw_requests
-                SET status = 'approved', processed_at = NOW()
+                SET
+                    status = 'approved',
+                    processed_at = NOW()
                 WHERE id = %s
             """, (request_id,))
 
-            log_action(action="withdraw_approved", user_id=user_id, admin_id=admin_id,
-                       metadata={"amount": str(amount), "request_id": request_id})
-        return True
-
-    except Exception as e:
-        logger.error(f"Withdraw approval failed: {str(e)}")
-        raise
-
-
-def reject_withdraw(request_id, remark=None, admin_id=None):
-    """
-    BUG FIXED #11:
-    Old code used `request_data["user_id"]` in the log_action call inside the
-    except block, but request_data was never fetched (NameError). The fix fetches
-    request_data first, then rejects and logs using that data.
-    """
-    try:
-        with get_cursor() as cur:
-            cur.execute("""
-                SELECT user_id, amount, status
-                FROM withdraw_requests WHERE id = %s FOR UPDATE
-            """, (request_id,))
-            request_data = cur.fetchone()   # FIXED: now fetched before use
-
-            if not request_data or request_data["status"] != "pending":
-                raise Exception("Request not found or already processed")
-
-            cur.execute("""
-                UPDATE withdraw_requests
-                SET status = 'rejected', processed_at = NOW(), admin_note = %s
-                WHERE id = %s AND status = 'pending'
-            """, (remark, request_id))
-
+            # -------------------------------------------------
+            # AUDIT LOG
+            # -------------------------------------------------
             log_action(
-                action="withdraw_rejected",
-                user_id=request_data["user_id"],  # FIXED: now defined
+                action="withdraw_approved",
+                user_id=user_id,
                 admin_id=admin_id,
-                metadata={"request_id": request_id, "remark": remark}
+                metadata={
+                    "amount": str(amount),
+                    "request_id": request_id
+                }
             )
 
         return True
 
     except Exception as e:
-        logger.error(f"Withdraw reject failed: {str(e)}")
+        logger.error(
+            f"Withdraw approval failed: {str(e)}"
+        )
+        raise
+
+
+# =========================================================
+# REJECT WITHDRAW
+# =========================================================
+def reject_withdraw(
+    request_id,
+    remark=None,
+    admin_id=None
+):
+
+    try:
+        with get_cursor() as cur:
+
+            # -------------------------------------------------
+            # LOCK REQUEST
+            # -------------------------------------------------
+            cur.execute("""
+                SELECT
+                    user_id,
+                    amount,
+                    status
+                FROM withdraw_requests
+                WHERE id = %s
+                FOR UPDATE
+            """, (request_id,))
+
+            request_data = cur.fetchone()
+
+            if (
+                not request_data
+                or request_data["status"] != "pending"
+            ):
+                raise Exception(
+                    "Request not found or already processed"
+                )
+
+            # -------------------------------------------------
+            # UPDATE STATUS
+            # -------------------------------------------------
+            cur.execute("""
+                UPDATE withdraw_requests
+                SET
+                    status = 'rejected',
+                    processed_at = NOW(),
+                    admin_note = %s
+                WHERE id = %s
+            """, (
+                remark,
+                request_id
+            ))
+
+            # -------------------------------------------------
+            # AUDIT LOG
+            # -------------------------------------------------
+            log_action(
+                action="withdraw_rejected",
+                user_id=request_data["user_id"],
+                admin_id=admin_id,
+                metadata={
+                    "request_id": request_id,
+                    "remark": remark
+                }
+            )
+
+        return True
+
+    except Exception as e:
+        logger.error(
+            f"Withdraw reject failed: {str(e)}"
+        )
         raise

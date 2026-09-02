@@ -3,21 +3,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 def get_sponsor_chain(user_id, max_levels=10):
-    """
-    Enterprise Genealogy Engine (Hardened):
-    - Recursive CTE (fast)
-    - Error safe
-    - Logging enabled
-    """
-
     if not user_id:
         return []
-
     try:
         with get_cursor() as cur:
-            # We join the users table here to get the actual names/emails for the UI
             cur.execute("""
                 WITH RECURSIVE upline AS (
                     SELECT sponsor_id, 1 AS level
@@ -36,10 +26,7 @@ def get_sponsor_chain(user_id, max_levels=10):
                 JOIN users u ON ul.sponsor_id = u.id
                 ORDER BY ul.level ASC;
             """, (user_id, max_levels))
-
-            # Fetch all details as dictionaries, not just a list of IDs
             return cur.fetchall()
-
     except Exception as e:
         logger.error(f"Sponsor chain error | user={user_id} | error={str(e)}")
         return []

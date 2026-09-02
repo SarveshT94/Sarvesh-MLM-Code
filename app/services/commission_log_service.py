@@ -58,9 +58,6 @@ def distribute_package_commissions(cur, purchaser_id, package_price, purchase_re
     cur.execute("SELECT level, commission_percentage FROM level_commissions ORDER BY level ASC")
     level_pcts = {row['level']: Decimal(str(row['commission_percentage'])) for row in cur.fetchall()}
 
-    # 3. Fetch Team Target Tiers
-    cur.execute("SELECT min_volume, max_volume, bonus_percentage FROM team_target_bonuses ORDER BY min_volume ASC")
-    target_tiers = cur.fetchall()
 
     # ---- STEP 1: Self Cashback ----
     cashback_amount = (price * cashback_pct) / Decimal('100')

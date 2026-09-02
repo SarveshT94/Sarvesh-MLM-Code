@@ -3,7 +3,15 @@ from flask_login import login_required, current_user
 from app.db import get_cursor
 
 from app.services.payout_service import get_payout_report
-from app.services.user_service import get_users_paginated
+
+# NOTE: user list / team-drill-down / activate / deactivate routes are
+# NOT defined here. The live, canonical versions of /admin/users,
+# /admin/user/team/<id>, /admin/user/activate/<id>, and
+# /admin/user/deactivate/<id> live in app/routes/main.py, which is what
+# your navigation and templates actually point to. Keeping only one
+# implementation avoids the confusion that happened when this file had
+# a second, conflicting copy under /api/admin/....
+
 from app.services.epin_service import generate_epins
 from app.services.admin_system_service import get_system_health
 from app.services.admin_wallet_service import (
@@ -48,20 +56,6 @@ def payout_report():
     try: return jsonify(get_payout_report()), 200
     except Exception as e: return jsonify({"error": "Failed to fetch report"}), 500
 
-@admin.route("/users")
-@login_required
-def admin_users_page():
-    return render_template("admin/users.html")
-
-@admin.route("/api/users")
-@login_required
-def admin_users_api():
-    try:
-        page   = request.args.get("page", 1, type=int)
-        search = request.args.get("search", "")
-        return jsonify(get_users_paginated(page=page, search=search)), 200
-    except Exception as e:
-        return jsonify({"error": "Data retrieval failed"}), 500
 
 @admin.route("/admin/system-health")
 @login_required
@@ -113,6 +107,38 @@ def process_payout_approval(request_id):
     approve_withdrawal(request_id, current_user.id)
     return redirect("/admin/withdraws")
 
+@admin.route('/payouts/reject/<int:request_id>', methods=['POST'])
+@login_required
+def process_payout_rejection(request_id):
+    try:
+        if not is_admin():
+            return jsonify({
+                "status": "error",
+                "message": "Unauthorized"
+            }), 403
+
+        data = request.get_json(silent=True) or {}
+        remark = data.get("remark", "Rejected by admin")
+
+        from app.services.withdraw_service import reject_withdraw
+
+        reject_withdraw(
+            request_id=request_id,
+            remark=remark,
+            admin_id=current_user.id
+        )
+
+        return jsonify({
+            "status": "success",
+            "message": "Withdraw request rejected successfully"
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
 @admin.route('/packages', methods=['GET'])
 @login_required
 def fetch_packages():
@@ -156,7 +182,7 @@ def update_rank_rule(level):
 
 
 # ==========================================
-# 🔥 COMPANY SETTINGS / BANK DETAILS
+# COMPANY SETTINGS / BANK DETAILS
 # ==========================================
 
 @admin.route('/settings', methods=['GET', 'POST'])
@@ -167,18 +193,13 @@ def company_settings():
         return redirect("/")
     
     if request.method == 'POST':
-        # 1. Grab General & Contact Fields
         company_name = request.form.get('company_name')
         gst_number = request.form.get('gst_number')
         support_email = request.form.get('support_email')
         support_phone = request.form.get('support_phone')
         head_office = request.form.get('head_office_address')
         branch_address = request.form.get('branch_address')
-        
-        # Logo Logic (assuming you handle uploads elsewhere, just saving the string for now)
         logo_url = request.form.get('existing_logo_url')
-
-        # 2. Grab Bank Fields
         bank_name = request.form.get('bank_name')
         acc_name = request.form.get('account_holder_name')
         acc_number = request.form.get('account_number')
@@ -187,7 +208,6 @@ def company_settings():
 
         try:
             with get_cursor() as cur:
-                # 3. Update ALL fields in the database at once
                 cur.execute("""
                     UPDATE company_settings 
                     SET company_name = %s, gst_number = %s, logo_url = %s, 
@@ -204,7 +224,6 @@ def company_settings():
             
         return redirect("/admin/settings")
         
-    # Handle GET request (Load the page)
     try:
         with get_cursor() as cur:
             cur.execute("SELECT * FROM company_settings WHERE id = 1")

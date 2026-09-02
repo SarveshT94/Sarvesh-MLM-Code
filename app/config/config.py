@@ -13,6 +13,7 @@ class Config:
     - Safe DB URL construction
     - Type casting
     - Caching support
+    - Database connection pool settings (ADDED)
     """
 
     # -------------------------
@@ -29,6 +30,10 @@ class Config:
     DB_NAME: str = os.getenv("DB_NAME")
     DB_USER: str = os.getenv("DB_USER")
     DB_PASSWORD: str = os.getenv("DB_PASSWORD")
+    
+    # ADDED: Connection Pool Limits (Moved from db.py for central management)
+    DB_POOL_MIN: int = int(os.getenv("DB_POOL_MIN", 5))
+    DB_POOL_MAX: int = int(os.getenv("DB_POOL_MAX", 100))
 
     # -------------------------
     # Security

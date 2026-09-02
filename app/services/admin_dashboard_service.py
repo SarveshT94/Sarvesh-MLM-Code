@@ -8,14 +8,6 @@ logger = logging.getLogger(__name__)
 def get_dashboard_stats():
     """
     Enterprise Analytics Engine.
-
-    BUG FIXED #15 — Double-counted commissions:
-    Old query added commissions table + wallet_ledger commissions together.
-    Every commission is written to BOTH tables, so the sum was 2× the real number.
-    Fixed: query ONLY the commissions table (the authoritative source).
-
-    BUG FIXED #16 — admin_system_service RealDictCursor crash:
-    fetchone()[0] fails with RealDictCursor. All fetches now use named keys.
     """
     stats = {
         "total_users": 0,
@@ -45,7 +37,7 @@ def get_dashboard_stats():
             """)
             stats["total_revenue"] = float(cur.fetchone()["val"])
 
-            # 4. Total Commissions — FIXED: query only commissions table (not both)
+            # 4. Total Commissions
             cur.execute("""
                 SELECT COALESCE(SUM(amount::numeric), 0) AS val
                 FROM commissions
@@ -68,9 +60,14 @@ def get_dashboard_stats():
             """)
             stats["pending_payout"] = float(cur.fetchone()["val"])
 
-            # 7. Total Wallet Balance (net: credits minus debits)
+            # 7. Total Wallet Balance (THE FIX)
             cur.execute("""
-                SELECT COALESCE(SUM(amount::numeric), 0) AS val
+                SELECT COALESCE(SUM(
+                    CASE 
+                        WHEN LOWER(transaction_type) LIKE '%debit%' THEN -ABS(amount::numeric)
+                        ELSE ABS(amount::numeric)
+                    END
+                ), 0) AS val
                 FROM wallet_ledger
             """)
             stats["total_wallet_balance"] = float(cur.fetchone()["val"])

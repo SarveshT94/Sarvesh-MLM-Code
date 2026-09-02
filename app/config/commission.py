@@ -1,14 +1,14 @@
-# MLM Level Commission Structure
+"""
+DEPRECATED FILE
 
-LEVEL_COMMISSIONS = {
-    1: 3.0,
-    2: 2.5,
-    3: 1.5,
-    4: 1.0,
-    5: 1.0,
-    6: 1.0,
-    7: 1.0,
-    8: 0.75,
-    9: 0.60,
-    10: 0.50
-}
+Commission percentages are now fully database-driven.
+
+Source:
+- global_commissions table
+- level_commissions table
+
+Handled by:
+app/services/package_service.py
+"""
+
+LEVEL_COMMISSIONS = {}
