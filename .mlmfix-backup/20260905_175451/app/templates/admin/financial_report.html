@@ -1,0 +1,306 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="mb-4">
+    <h4 class="fw-bold text-dark mb-1"><i class="fas fa-chart-line me-2 text-primary"></i>Financial Dashboard</h4>
+    <p class="text-muted">Streamlined financial overview and real-time audit drills.</p>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <a href="javascript:void(0)" onclick="openAuditDrill('revenue', 'Total Revenue')" class="text-decoration-none">
+            <div class="card shadow-sm border-0 rounded-4 bg-white border-bottom border-primary border-4 transition-hover h-100">
+                <div class="card-body p-4 text-center">
+                    <p class="text-muted fw-bold small mb-2">TOTAL REVENUE</p>
+                    <h2 class="fw-bold text-dark">₹{{ "%.2f"|format(report.total_revenue | default(0)) }}</h2>
+                    <div class="badge bg-primary bg-opacity-10 text-primary p-2 mt-2">
+                        <i class="fas fa-table me-1"></i> View Audit Drill
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-md-4">
+        <a href="javascript:void(0)" onclick="openAuditDrill('gross', 'Gross Profit')" class="text-decoration-none">
+            <div class="card shadow-sm border-0 rounded-4 bg-white border-bottom border-success border-4 transition-hover h-100">
+                <div class="card-body p-4 text-center">
+                    <p class="text-muted fw-bold small mb-2">GROSS PROFIT</p>
+                    <h2 class="fw-bold text-success">₹{{ "%.2f"|format(report.gross_profit | default(0)) }}</h2>
+                    <div class="text-muted small mt-2">Revenue minus Product Costs</div>
+                    <div class="badge bg-success bg-opacity-10 text-success p-2 mt-2">
+                        <i class="fas fa-table me-1"></i> View Audit Drill
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-md-4">
+        <a href="javascript:void(0)" onclick="openAuditDrill('net', 'Net Profit')" class="text-decoration-none">
+            <div class="card shadow-sm border-0 rounded-4 bg-dark text-white transition-hover h-100">
+                <div class="card-body p-4 text-center">
+                    <p class="text-light opacity-75 fw-bold small mb-2">NET PROFIT</p>
+                    <h2 class="fw-bold text-white">₹{{ "%.2f"|format(report.net_profit | default(0)) }}</h2>
+                    <div class="text-light opacity-50 small mt-2">Gross Profit - Commissions + Admin Fees</div>
+                    <div class="badge bg-light bg-opacity-10 text-light p-2 mt-2">
+                        <i class="fas fa-table me-1"></i> View Audit Drill
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-4">
+        <a href="javascript:void(0)" onclick="openAuditDrill('admin_fees', 'Admin Fees')" class="text-decoration-none">
+            <div class="card shadow-sm border-0 rounded-4 bg-white border-bottom border-warning border-4 transition-hover h-100">
+                <div class="card-body p-4 text-center">
+                    <p class="text-muted fw-bold small mb-2">ADMIN FEES (REVENUE)</p>
+                    <h2 class="fw-bold text-warning">₹{{ "%.2f"|format(report.admin_fees | default(0)) }}</h2>
+                    <div class="badge bg-warning bg-opacity-10 text-warning p-2 mt-2">
+                        <i class="fas fa-table me-1"></i> View Audit Drill
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-md-4">
+        <a href="javascript:void(0)" onclick="openAuditDrill('tds', 'TDS Collected')" class="text-decoration-none">
+            <div class="card shadow-sm border-0 rounded-4 bg-white border-bottom border-info border-4 transition-hover h-100">
+                <div class="card-body p-4 text-center">
+                    <p class="text-muted fw-bold small mb-2">TDS COLLECTED (TAX)</p>
+                    <h3 class="fw-bold text-info">₹{{ "%.2f"|format(report.total_tds | default(0)) }}</h3>
+                    <div class="badge bg-info bg-opacity-10 text-info p-2 mt-2">
+                        <i class="fas fa-table me-1"></i> View Audit Drill
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-md-4">
+        <a href="javascript:void(0)" onclick="openAuditDrill('liability', 'System Liability')" class="text-decoration-none">
+            <div class="card shadow-sm border-0 rounded-4 bg-white border-bottom border-danger border-4 transition-hover h-100">
+                <div class="card-body p-4 text-center">
+                    <p class="text-muted fw-bold small mb-2">SYSTEM LIABILITY</p>
+                    <h3 class="fw-bold text-danger">₹{{ "%.2f"|format(report.total_wallet_liability | default(0)) }}</h3>
+                    <div class="text-muted small mt-2">User Wallets (Includes Pending) + Govt TDS</div>
+                    <div class="badge bg-danger bg-opacity-10 text-danger p-2 mt-2">
+                        <i class="fas fa-table me-1"></i> View Audit Drill
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="modal fade" id="auditModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-header border-bottom-0 bg-light rounded-top-4">
+                <h5 class="modal-title fw-bold text-dark" id="auditModalTitle">Audit Drill</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div id="auditTableContainer" class="table-responsive" style="max-height: 500px; overflow-y: auto;"></div>
+            </div>
+            <div class="modal-footer border-top-0 d-flex justify-content-between pb-4 bg-light">
+                <p class="text-muted small mb-0 ms-2">Displaying recent ledger records. Export for full audit trail.</p>
+                <div>
+                    <button type="button" class="btn btn-outline-secondary px-4 rounded-pill fw-bold me-2" data-bs-dismiss="modal">Close Window</button>
+                    <button type="button" class="btn btn-success px-4 rounded-pill fw-bold shadow-sm" onclick="downloadExcel()">
+                        <i class="fas fa-file-excel me-2"></i> Export Data
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .transition-hover { transition: all 0.2s ease; cursor: default; }
+    a .transition-hover { cursor: pointer; }
+    .transition-hover:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important; }
+    #auditTableContainer thead th { position: sticky; top: 0; background-color: #f8f9fa; z-index: 1; border-bottom: 2px solid #dee2e6; }
+    #auditTableContainer td.number-cell { text-align: right; font-family: monospace; }
+    #auditTableContainer tbody tr:hover { background-color: rgba(0, 123, 255, 0.05); transition: background 0.2s; }
+</style>
+
+<script>
+    let currentDrillType = '';
+
+    function isPhoneField(key) {
+        const lowerKey = key.toLowerCase();
+        return lowerKey.includes('mobile') || lowerKey.includes('phone') || lowerKey === 'contact' || lowerKey === 'mobileno';
+    }
+
+    function isMonetaryField(key) {
+        const monetaryKeys = [
+            'amount', 'fee', 'tds', 'price', 'cost', 'profit', 'revenue', 
+            'balance', 'tax', 'total', 'net', 'gross', 'admin_fee', 
+            'tds_amount', 'commission', 'bonus', 'payout', 'withdrawal_amount',
+            'withdraw_amount', 'requested_amount', 'gross_amount', 'net_wallet_balance'
+        ];
+        const lowerKey = key.toLowerCase();
+        if (lowerKey.includes('count') || lowerKey.includes('id') || isPhoneField(key)) return false;
+        return monetaryKeys.some(mk => lowerKey === mk || lowerKey.endsWith('_' + mk));
+    }
+
+    function formatCellValue(value, key) {
+        if (value === null || value === undefined) return '-';
+        if (isPhoneField(key)) return value.toString();
+        const isNumeric = typeof value === 'number' || (typeof value === 'string' && !isNaN(parseFloat(value)) && isFinite(value));
+        if (!isNumeric) return value.toString();
+        const numValue = parseFloat(value);
+        if (isMonetaryField(key)) {
+            return '₹' + numValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        if (Number.isInteger(numValue)) return numValue.toString();
+        return numValue.toFixed(2);
+    }
+
+    function buildDynamicTable(tableData) {
+        if (!tableData || tableData.length === 0) return '<div class="text-center p-5 text-muted"><i class="fas fa-inbox fa-3x mb-3 opacity-25"></i><h5>No records found.</h5></div>';
+        let headers = Object.keys(tableData[0]);
+        let html = '<table class="table table-hover table-bordered mb-0 align-middle"><thead><tr>';
+        headers.forEach(h => {
+            let nice = h.replace(/_/g, ' ').toUpperCase();
+            html += `<th class="text-nowrap">${nice}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+        tableData.forEach(row => {
+            html += '<tr>';
+            headers.forEach(h => {
+                let val = row[h];
+                let formatted = formatCellValue(val, h);
+                let isNumeric = !isPhoneField(h) && (typeof val === 'number' || (typeof val === 'string' && !isNaN(parseFloat(val))));
+                let cls = isNumeric ? 'class="number-cell"' : '';
+                html += `<td ${cls}>${formatted}</td>`;
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        html += `<div class="mt-3 text-muted small"><i class="fas fa-list me-1"></i> Showing ${tableData.length} record(s)</div>`;
+        return html;
+    }
+
+    function buildStrictTable(tableData, drillType) {
+        if (!tableData || tableData.length === 0) return '<div class="text-center p-5 text-muted"><i class="fas fa-inbox fa-3x mb-3 opacity-25"></i><h5>No records found.</h5></div>';
+        
+        const columns = [
+            { display: "DATE", possibleKeys: ["date", "created_at", "transaction_date", "entry_date", "txn_date", "datetime"] },
+            { display: "REQUEST ID", possibleKeys: ["request_id", "req_id", "requestId", "withdrawal_request_id", "order_id", "transaction_id"] },
+            { display: "USER ID", possibleKeys: ["user_id", "userId", "userid", "member_id", "user"] },
+            { display: "WITHDRAWAL AMOUNT", possibleKeys: ["withdrawal_amount", "withdraw_amount", "requested_amount", "gross_amount", "amount", "transaction_amount", "request_amount"] },
+            { display: "FEE AMOUNT", possibleKeys: drillType === 'tds' ? ["tds_amount", "tds", "tax_amount", "tds_deducted"] : ["admin_fee", "admin_fees", "fee", "admin_charge", "service_fee"] },
+            { display: "USER MOBILE NUMBER", possibleKeys: ["user_mobile_number", "mobile", "phone", "contact", "user_mobile", "mobile_number", "phone_number"] },
+            { display: "USER NAME", possibleKeys: ["user_name", "username", "name", "full_name", "member_name", "user_fullname"] }
+        ];
+        
+        if (drillType === 'tds') columns[4].display = "TDS AMOUNT";
+        else columns[4].display = "ADMIN FEE";
+        
+        const sampleRow = tableData[0];
+        const availableKeys = Object.keys(sampleRow);
+        
+        let columnMapping = [];
+        for (let col of columns) {
+            let foundKey = null;
+            for (let possible of col.possibleKeys) {
+                if (availableKeys.includes(possible)) {
+                    foundKey = possible;
+                    break;
+                }
+                let lowerPossible = possible.toLowerCase();
+                let match = availableKeys.find(k => k.toLowerCase() === lowerPossible);
+                if (match) {
+                    foundKey = match;
+                    break;
+                }
+            }
+            columnMapping.push({
+                display: col.display,
+                key: foundKey
+            });
+        }
+        
+        let html = '<table class="table table-hover table-bordered mb-0 align-middle"><thead><tr>';
+        for (let col of columnMapping) {
+            html += `<th class="text-nowrap">${col.display}</th>`;
+        }
+        html += '</tr></thead><tbody>';
+        
+        for (let row of tableData) {
+            html += '<tr>';
+            for (let col of columnMapping) {
+                let rawValue = col.key ? row[col.key] : '-';
+                let formatted = formatCellValue(rawValue, col.key || col.display);
+                let isNumeric = col.key && !isPhoneField(col.key) && (typeof rawValue === 'number' || (typeof rawValue === 'string' && !isNaN(parseFloat(rawValue))));
+                let cls = isNumeric ? 'class="number-cell"' : '';
+                html += `<td ${cls}>${formatted}</td>`;
+            }
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+        html += `<div class="mt-3 text-muted small"><i class="fas fa-list me-1"></i> Showing ${tableData.length} record(s)`;
+        if (drillType === 'net') {
+            html += `<br><small class="text-info">Net Profit = Gross Profit - Commissions + Admin Fees</small>`;
+        }
+        html += `</div>`;
+        return html;
+    }
+
+    function openAuditDrill(type, title) {
+        currentDrillType = type;
+        document.getElementById('auditModalTitle').innerText = title + ' - Web Audit';
+        const container = document.getElementById('auditTableContainer');
+        container.innerHTML = `<div class="text-center p-5"><div class="spinner-border text-primary mb-3" role="status"></div><h6 class="text-muted">Fetching fresh ledger data...</h6></div>`;
+
+        if (typeof bootstrap !== 'undefined') {
+            new bootstrap.Modal(document.getElementById('auditModal')).show();
+        } else if (typeof window.jQuery !== 'undefined') {
+            $('#auditModal').modal('show');
+        }
+
+        let apiEndpoint = type;
+        if (type === 'gross') apiEndpoint = 'gross-profit';
+        if (type === 'net') apiEndpoint = 'net-profit';
+        if (type === 'admin_fees') apiEndpoint = 'admin-fees';
+
+        const url = `/api/admin/report/audit/${apiEndpoint}?v=${Date.now()}`;
+        fetch(url)
+            .then(res => res.json())
+            .then(res => {
+                if (!res.success) {
+                    container.innerHTML = `<div class="alert alert-danger">${res.message || 'Error loading data.'}</div>`;
+                    return;
+                }
+                let tableData = (type === 'net') ? res.recent : res.data;
+                if (!tableData || tableData.length === 0) {
+                    container.innerHTML = `<div class="text-center p-5 text-muted"><i class="fas fa-inbox fa-3x mb-3 opacity-25"></i><h5>No records found for this period.</h5></div>`;
+                    return;
+                }
+
+                let html;
+                if (type === 'admin_fees' || type === 'tds') {
+                    html = buildStrictTable(tableData, type);
+                } else {
+                    html = buildDynamicTable(tableData);
+                }
+                container.innerHTML = html;
+            })
+            .catch(err => {
+                console.error(err);
+                container.innerHTML = `<div class="alert alert-danger">Failed to load data. Check server connection.</div>`;
+            });
+    }
+
+    function downloadExcel() {
+        if (!currentDrillType) return;
+        window.location.href = `/api/admin/report/export/${currentDrillType}?t=${Date.now()}`;
+    }
+</script>
+{% endblock %}

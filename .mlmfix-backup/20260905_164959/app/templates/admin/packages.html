@@ -1,0 +1,176 @@
+{% extends "admin/base.html" %}
+{% block title %}Packages & Commission Plan{% endblock %}
+{% block header_title %}Packages & Commission Plan{% endblock %}
+
+{% block content %}
+{#
+  BUSINESS PLAN ADMIN SCREEN (complete replacement for packages.html).
+  Context provided by app/routes/admin/package_routes.py:
+    packages    -> list of subscription_plans (each with .images)
+    settings    -> global_commissions rows (setting_key, percentage_value, description)
+    level_comms -> commission_plan rows (level, commission_percentage)
+#}
+<style>
+  .pp-card{background:#fff;border:1px solid #e7ebf2;border-radius:16px;padding:1.4rem;
+    box-shadow:0 1px 2px rgba(15,23,42,.04);margin-bottom:1.4rem;}
+  .pp-title{font-weight:800;color:#0f172a;font-size:1.05rem;margin-bottom:.9rem;
+    display:flex;align-items:center;gap:.5rem;}
+  .pp-badge{font-size:.7rem;background:#eef2ff;color:#4f46e5;padding:.15rem .55rem;
+    border-radius:999px;font-weight:700;}
+  .form-label-sm{font-size:.78rem;font-weight:600;color:#475569;margin-bottom:.2rem;}
+  .plan-tile{border:1px solid #e7ebf2;border-radius:14px;padding:1rem;background:#fff;}
+  .plan-tile .price{font-size:1.3rem;font-weight:800;color:#4f46e5;}
+  .level-row{display:grid;grid-template-columns:120px 1fr 90px;gap:.8rem;align-items:center;
+    padding:.55rem 0;border-bottom:1px dashed #eef2f7;}
+  .level-row:last-child{border-bottom:0;}
+  .lvl-name{font-weight:700;color:#334155;}
+  .lvl-rel{font-size:.72rem;color:#94a3b8;}
+  input[type=number]{border:1px solid #e2e8f0;border-radius:.55rem;padding:.45rem .7rem;}
+  .btn-save{background:#4f46e5;color:#fff;border:0;border-radius:.55rem;padding:.45rem 1rem;
+    font-weight:700;font-size:.85rem;}
+  .btn-save:hover{background:#4338ca;}
+  .comm-pct{width:90px;text-align:right;font-weight:700;}
+  .thumb{width:52px;height:52px;border-radius:10px;object-fit:cover;border:1px solid #e7ebf2;}
+</style>
+
+<div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+  <div>
+    <h4 class="fw-bold mb-1" style="color:#0f172a;">📦 Packages & Commission Plan</h4>
+    <p class="text-muted mb-0">Manage joining packages and the payout percentages. Changes apply within ~60 seconds.</p>
+  </div>
+</div>
+
+<!-- ===================== PACKAGES ===================== -->
+<div class="pp-card">
+  <div class="pp-title">Subscription Packages <span class="pp-badge">{{ packages|length }} plans</span></div>
+
+  <div class="row g-3 mb-4">
+    {% for p in packages %}
+    <div class="col-md-6 col-lg-4">
+      <form method="POST" action="/admin/packages/update" enctype="multipart/form-data" class="plan-tile h-100">
+        <input type="hidden" name="plan_id" value="{{ p.id }}">
+        <div class="d-flex gap-2 align-items-center mb-2">
+          {% if p.images and p.images[0].path %}
+            <img src="{{ p.images[0].path }}" class="thumb" alt="">
+          {% endif %}
+          <div>
+            <div class="fw-bold text-dark">{{ p.name }}</div>
+            <div class="price">₹{{ p.price }}</div>
+          </div>
+          <label class="ms-auto small d-flex align-items-center gap-1">
+            <input type="checkbox" name="is_active" {% if p.is_active %}checked{% endif %}> Active
+          </label>
+        </div>
+        <div class="row g-2">
+          <div class="col-6">
+            <div class="form-label-sm">Price (₹)</div>
+            <input type="number" step="0.01" name="price" class="form-control form-control-sm" value="{{ p.price }}" required>
+          </div>
+          <div class="col-6">
+            <div class="form-label-sm">Product Cost (₹)</div>
+            <input type="number" step="0.01" name="product_cost" class="form-control form-control-sm" value="{{ p.product_cost or 0 }}">
+          </div>
+          <div class="col-6">
+            <div class="form-label-sm">Lucky Coupons</div>
+            <input type="number" name="coupons" class="form-control form-control-sm" value="{{ p.lucky_draw_coupons or 12 }}">
+          </div>
+          <div class="col-6">
+            <div class="form-label-sm">Product Images</div>
+            <input type="file" name="product_images" multiple accept="image/*" class="form-control form-control-sm">
+          </div>
+        </div>
+        <button class="btn-save w-100 mt-3" type="submit">Save Plan</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Add new plan -->
+  <form method="POST" action="/admin/packages/add" class="row g-2 align-items-end border-top pt-3">
+    <div class="col-md-3">
+      <div class="form-label-sm">New Plan Name</div>
+      <input type="text" name="name" class="form-control form-control-sm" placeholder="e.g. Diamond" required>
+    </div>
+    <div class="col-md-2">
+      <div class="form-label-sm">Price (₹)</div>
+      <input type="number" step="0.01" name="price" class="form-control form-control-sm" placeholder="3600" required>
+    </div>
+    <div class="col-md-2">
+      <div class="form-label-sm">Product Cost</div>
+      <input type="number" step="0.01" name="product_cost" class="form-control form-control-sm" value="0">
+    </div>
+    <div class="col-md-2">
+      <div class="form-label-sm">Coupons</div>
+      <input type="number" name="coupons" class="form-control form-control-sm" value="12">
+    </div>
+    <div class="col-md-3">
+      <button class="btn-save w-100" type="submit">＋ Create Package</button>
+    </div>
+  </form>
+</div>
+
+<!-- ===================== LEVEL / GENERATION INCOME ===================== -->
+<div class="pp-card">
+  <div class="pp-title">Level Commission (Generation Income) <span class="pp-badge">paid to upline on each purchase</span></div>
+  <p class="text-muted small mb-3">Percentage of the purchased package price paid to each upline level. Level 1 = direct sponsor (also uses the Direct Commission below).</p>
+
+  {% set relations = {1:'Direct sponsor',2:'2nd upline',3:'3rd upline',4:'4th upline',5:'5th upline',
+                      6:'6th upline',7:'7th upline',8:'8th upline',9:'9th upline',10:'10th upline'} %}
+  {% for lc in level_comms %}
+  <div class="level-row">
+    <div>
+      <div class="lvl-name">Level {{ lc.level }}</div>
+      <div class="lvl-rel">{{ relations.get(lc.level, '') }}</div>
+    </div>
+    <form method="POST" action="/admin/level-commissions/update" class="d-flex align-items-center gap-2 mb-0">
+      <input type="hidden" name="level" value="{{ lc.level }}">
+      <div class="flex-grow-1">
+        <div class="progress" style="height:10px;background:#eef2ff;border-radius:99px;">
+          <div class="progress-bar" style="width: {{ (lc.commission_percentage / 10 * 100) if lc.commission_percentage else 0 }}%;background:#4f46e5;border-radius:99px;"></div>
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-1">
+        <input type="number" step="0.01" name="percentage_value" class="form-control form-control-sm comm-pct" value="{{ lc.commission_percentage }}" required>
+        <span class="fw-bold">%</span>
+      </div>
+      <button class="btn-save" type="submit">Save</button>
+    </form>
+  </div>
+  {% else %}
+  <p class="text-muted small">No level commissions configured yet — run migration 0004 to seed them.</p>
+  {% endfor %}
+</div>
+
+<!-- ===================== GLOBAL COMMISSIONS ===================== -->
+<div class="pp-card">
+  <div class="pp-title">Global Settings <span class="pp-badge">direct · cashback · fees</span></div>
+  <div class="row g-3">
+    {% for s in settings %}
+    <div class="col-md-6 col-lg-4">
+      <form method="POST" action="/admin/commissions/update" class="border rounded-3 p-3 h-100">
+        <input type="hidden" name="setting_key" value="{{ s.setting_key }}">
+        <div class="fw-bold text-capitalize text-dark mb-1">{{ s.setting_key.replace('_',' ') }}</div>
+        {% if s.description %}<div class="small text-muted mb-2">{{ s.description }}</div>{% endif %}
+        <div class="d-flex align-items-center gap-2">
+          <input type="number" step="0.01" name="percentage_value" class="form-control form-control-sm" value="{{ s.percentage_value }}" required>
+          <span class="fw-bold">%</span>
+          <button class="btn-save" type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+    {% else %}
+    <p class="text-muted small">No global settings configured — run migration 0004.</p>
+    {% endfor %}
+  </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index:1080;">
+      {% for cat, msg in messages %}
+        <div class="alert alert-{{ 'danger' if cat=='danger' else 'success' }} shadow-sm mb-2">{{ msg }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+{% endblock %}

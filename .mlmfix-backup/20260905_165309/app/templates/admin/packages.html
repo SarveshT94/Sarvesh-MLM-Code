@@ -1,0 +1,224 @@
+{% extends "admin/base.html" %}
+{% block title %}Packages & Commission Plan{% endblock %}
+{% block header_title %}Packages & Commission Plan{% endblock %}
+
+{% block content %}
+{#
+  E-COMMERCE-STYLE PACKAGE MANAGER + COMMISSION PLAN (Flipkart-like cards).
+  Context: packages (with .images), settings (global_commissions), level_comms.
+#}
+<style>
+  .ec-wrap{max-width:1280px;margin:0 auto;}
+  .ec-section-title{font-weight:800;color:#0f172a;font-size:1.05rem;margin:1.6rem 0 .9rem;
+    display:flex;align-items:center;gap:.5rem;}
+  .ec-badge{font-size:.7rem;background:#eef2ff;color:#4f46e5;padding:.15rem .55rem;
+    border-radius:999px;font-weight:700;}
+
+  /* ---- Product card (Flipkart style) ---- */
+  .product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:1.1rem;}
+  .pcard{background:#fff;border:1px solid #e7ebf2;border-radius:16px;overflow:hidden;
+    box-shadow:0 1px 2px rgba(15,23,42,.05);display:flex;flex-direction:column;transition:.15s;}
+  .pcard:hover{box-shadow:0 10px 28px rgba(15,23,42,.10);transform:translateY(-2px);}
+  .pcard-media{position:relative;height:170px;background:linear-gradient(135deg,#f8fafc,#eef2ff);
+    display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .pcard-media img{width:100%;height:100%;object-fit:cover;}
+  .pcard-media .ph{font-size:3rem;opacity:.35;}
+  .tier-chip{position:absolute;top:10px;left:10px;color:#fff;font-weight:800;font-size:.72rem;
+    padding:.28rem .7rem;border-radius:999px;letter-spacing:.4px;box-shadow:0 4px 10px rgba(0,0,0,.15);}
+  .coupon-chip{position:absolute;top:10px;right:10px;background:#fff;color:#b45309;font-weight:700;
+    font-size:.7rem;padding:.28rem .6rem;border-radius:999px;border:1px solid #fde68a;}
+  .pcard-body{padding:1rem 1.1rem 1.1rem;flex:1;display:flex;flex-direction:column;}
+  .pcard-name{font-weight:800;color:#0f172a;font-size:1.02rem;}
+  .pcard-price{margin:.35rem 0 .15rem;}
+  .pcard-price .now{font-size:1.35rem;font-weight:800;color:#16a34a;}
+  .pcard-price .mrp{font-size:.85rem;color:#94a3b8;text-decoration:line-through;margin-left:.4rem;}
+  .pcard-meta{font-size:.78rem;color:#64748b;margin-bottom:.7rem;}
+  .pcard .edit-form{border-top:1px dashed #e7ebf2;padding-top:.8rem;margin-top:auto;}
+  .ec-input{border:1px solid #e2e8f0;border-radius:.5rem;padding:.4rem .6rem;font-size:.82rem;width:100%;}
+  .ec-label{font-size:.68rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.4px;margin-bottom:.15rem;}
+  .ec-btn{border:0;border-radius:.5rem;font-weight:700;font-size:.82rem;padding:.5rem .8rem;cursor:pointer;}
+  .ec-btn-primary{background:#4f46e5;color:#fff;}
+  .ec-btn-primary:hover{background:#4338ca;}
+  .ec-btn-ghost{background:#f1f5f9;color:#334155;}
+  .thumbs{display:flex;gap:.35rem;flex-wrap:wrap;margin:.4rem 0;}
+  .thumbs img{width:34px;height:34px;object-fit:cover;border-radius:7px;border:1px solid #e7ebf2;}
+
+  /* ---- Commission panels ---- */
+  .pp-card{background:#fff;border:1px solid #e7ebf2;border-radius:16px;padding:1.4rem;
+    box-shadow:0 1px 2px rgba(15,23,42,.04);}
+  .level-row{display:grid;grid-template-columns:120px 1fr 130px 80px;gap:.8rem;align-items:center;
+    padding:.55rem 0;border-bottom:1px dashed #eef2f7;}
+  .level-row:last-child{border-bottom:0;}
+  .lvl-name{font-weight:700;color:#334155;}
+  .lvl-rel{font-size:.72rem;color:#94a3b8;}
+  .comm-pct{width:90px;text-align:right;font-weight:700;}
+  .gcard{border:1px solid #e7ebf2;border-radius:12px;padding:.9rem;height:100%;}
+</style>
+
+<div class="ec-wrap">
+  <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-2">
+    <div>
+      <h4 class="fw-bold mb-1" style="color:#0f172a;">📦 Packages & Commission Plan</h4>
+      <p class="text-muted mb-0">Manage products like a store, and set payout percentages. Changes apply within ~60 seconds.</p>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for cat, msg in messages %}
+        <div class="alert alert-{{ 'danger' if cat=='danger' else 'success' }} py-2">{{ msg }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- ===================== PRODUCT CATALOG ===================== -->
+  <div class="ec-section-title">🛍️ Product Catalog <span class="ec-badge">{{ packages|length }} plans</span></div>
+  <div class="product-grid">
+    {% set tier_colors = {1:'#64748b',2:'#b45309',3:'#94a3b8',4:'#d4af37',5:'#0ea5e9'} %}
+    {% for p in packages %}
+    <div class="pcard">
+      <div class="pcard-media">
+        {% if p.images and p.images[0].path %}
+          <img src="{{ p.images[0].path }}" alt="{{ p.name }}">
+        {% else %}
+          <i class="bi bi-box-seam ph"></i>
+        {% endif %}
+        <span class="tier-chip" style="background:{{ tier_colors.get(p.id, '#4f46e5') }};">{{ p.name|upper }}</span>
+        <span class="coupon-chip">🎟️ {{ p.lucky_draw_coupons or 12 }} coupons</span>
+      </div>
+      <div class="pcard-body">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <div class="pcard-name">{{ p.name }} Combo</div>
+            <div class="pcard-price">
+              <span class="now">₹{{ p.price }}</span>
+            </div>
+          </div>
+          <label class="small d-flex align-items-center gap-1 mt-1">
+            <input type="checkbox" form="f{{p.id}}" name="is_active" {% if p.is_active %}checked{% endif %}> Active
+          </label>
+        </div>
+        <div class="pcard-meta">Product cost: ₹{{ p.product_cost or 0 }} · Joining pack</div>
+
+        <form id="f{{p.id}}" method="POST" action="/admin/packages/update" enctype="multipart/form-data" class="edit-form">
+          <input type="hidden" name="plan_id" value="{{ p.id }}">
+          {% if p.images %}
+          <div class="thumbs">
+            {% for im in p.images %}<img src="{{ im.path }}" alt="">{% endfor %}
+          </div>
+          {% endif %}
+          <div class="row g-2">
+            <div class="col-6"><div class="ec-label">Selling Price ₹</div>
+              <input type="number" step="0.01" name="price" class="ec-input" value="{{ p.price }}" required></div>
+            <div class="col-6"><div class="ec-label">Product Cost ₹</div>
+              <input type="number" step="0.01" name="product_cost" class="ec-input" value="{{ p.product_cost or 0 }}"></div>
+            <div class="col-6"><div class="ec-label">Coupons</div>
+              <input type="number" name="coupons" class="ec-input" value="{{ p.lucky_draw_coupons or 12 }}"></div>
+            <div class="col-6"><div class="ec-label">Product Images</div>
+              <input type="file" name="product_images" multiple accept="image/*" class="ec-input" style="padding:.25rem;"></div>
+          </div>
+          <button class="ec-btn ec-btn-primary w-100 mt-2" type="submit">💾 Save Product</button>
+        </form>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-muted">No packages yet — use “Add New Product” below (or run migration 0005 to seed the catalogue).</div>
+    {% endfor %}
+  </div>
+
+  <!-- Add new product -->
+  <div class="pp-card mt-3">
+    <div class="ec-section-title" style="margin-top:.2rem;">➕ Add New Product</div>
+    <form method="POST" action="/admin/packages/add" enctype="multipart/form-data" class="row g-2 align-items-end">
+      <div class="col-md-3"><div class="ec-label">Plan Name</div>
+        <input type="text" name="name" class="ec-input" placeholder="e.g. Diamond" required></div>
+      <div class="col-md-2"><div class="ec-label">Selling Price ₹</div>
+        <input type="number" step="0.01" name="price" class="ec-input" placeholder="3600" required></div>
+      <div class="col-md-2"><div class="ec-label">Product Cost ₹</div>
+        <input type="number" step="0.01" name="product_cost" class="ec-input" value="0"></div>
+      <div class="col-md-1"><div class="ec-label">Coupons</div>
+        <input type="number" name="coupons" class="ec-input" value="12"></div>
+      <div class="col-md-2"><div class="ec-label">Product Image</div>
+        <input type="file" name="product_images" accept="image/*" class="ec-input" style="padding:.25rem;"></div>
+      <div class="col-md-2">
+        <button class="ec-btn ec-btn-primary w-100" type="submit">Create Product</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===================== LEVEL COMMISSIONS ===================== -->
+  <div class="ec-section-title">💰 Level Generation Income <span class="ec-badge">L1 direct + L2–L10 = 15% pool</span></div>
+  <div class="pp-card">
+    {% set relations = {1:'Direct sponsor',2:'2nd upline',3:'3rd upline',4:'4th upline',5:'5th upline',
+                        6:'6th upline',7:'7th upline',8:'8th upline',9:'9th upline',10:'10th upline'} %}
+    {% for lc in level_comms %}
+    <div class="level-row">
+      <div>
+        <div class="lvl-name">Level {{ lc.level }}</div>
+        <div class="lvl-rel">{{ relations.get(lc.level, '') }}</div>
+      </div>
+      <form method="POST" action="/admin/level-commissions/update" class="d-flex align-items-center gap-2 mb-0">
+        <input type="hidden" name="level" value="{{ lc.level }}">
+        <div class="flex-grow-1">
+          <div class="progress" style="height:10px;background:#eef2ff;border-radius:99px;">
+            <div class="progress-bar" style="width: {{ (lc.commission_percentage / 10 * 100) if lc.commission_percentage else 0 }}%;background:#4f46e5;border-radius:99px;"></div>
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-1">
+          <input type="number" step="0.01" name="percentage_value" class="ec-input comm-pct" value="{{ lc.commission_percentage }}" required>
+          <span class="fw-bold">%</span>
+        </div>
+        <button class="ec-btn ec-btn-primary" type="submit">Save</button>
+      </form>
+    </div>
+    {% else %}
+    <p class="text-muted small mb-0">No level commissions — run migration 0005 to seed the plan.</p>
+    {% endfor %}
+  </div>
+
+  <!-- ===================== GLOBAL COMMISSIONS ===================== -->
+  <div class="ec-section-title">⚙️ Global Settings <span class="ec-badge">cashback · fees · TDS</span></div>
+  <div class="row g-3">
+    {% for s in settings %}
+    <div class="col-md-6 col-lg-4">
+      <form method="POST" action="/admin/commissions/update" class="gcard">
+        <input type="hidden" name="setting_key" value="{{ s.setting_key }}">
+        <div class="fw-bold text-capitalize text-dark mb-1">{{ s.setting_key.replace('_',' ') }}</div>
+        {% if s.description %}<div class="small text-muted mb-2">{{ s.description }}</div>{% endif %}
+        <div class="d-flex align-items-center gap-2">
+          <input type="number" step="0.01" name="percentage_value" class="ec-input" value="{{ s.percentage_value }}" required>
+          <span class="fw-bold">%</span>
+          <button class="ec-btn ec-btn-primary" type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+    {% else %}
+    <p class="text-muted small">No global settings — run migration 0005.</p>
+    {% endfor %}
+  </div>
+
+  <!-- ===================== RANKS (read-only summary here; editable on Ranks page) ===================== -->
+  <div class="ec-section-title">🏆 Dynamic Rank Progression</div>
+  <div class="pp-card">
+    <p class="text-muted small mb-2">Ranks are auto-awarded from team size + business volume. Edit thresholds on the <a href="/admin/ranks">Ranks</a> page. Fast-action bonus is paid once when a rank is reached.</p>
+    <div class="row g-2">
+      {% set rcolors = {'Bronze':'#b45309','Silver':'#94a3b8','Gold':'#d4af37','Emerald':'#10b981',
+                        'Platinum':'#0ea5e9','Ruby':'#e11d48','Diamond':'#6366f1','Crown Diamond':'#7c3aed'} %}
+      <table class="table table-sm mb-0 align-middle">
+        <thead><tr><th>Level</th><th>Rank</th><th>Team Size</th><th>Business Volume</th><th>Fast Action Bonus</th></tr></thead>
+        <tbody>
+        {% for r in ranks|default([]) %}
+          <tr>
+            <td>{{ r.level }}</td>
+            <td><span class="badge" style="background:{{ rcolors.get(r.rank_name,'#4f46e5') }}22;color:{{ rcolors.get(r.rank_name,'#4f46e5') }};">{{ r.rank_name }}</span></td>
+            <td>{{ r.req_team_size }}</td>
+            <td>₹{{ '{:,.0f}'.format(r.req_business_vol) }}</td>
+            <td>{{ r.bonus_percentage }}%</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,125 @@
+{% extends "admin/base.html" %}
+{% block title %}Store{% endblock %}
+{% block header_title %}E-Commerce Store{% endblock %}
+{% block content %}
+<style>
+  .st-card{background:#fff;border-radius:16px;box-shadow:0 4px 14px rgba(0,0,0,.06);padding:18px 20px}
+  .st-kpi h3{font-weight:800;margin:0}
+  .st-kpi small{color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.5px;font-size:11px}
+  .cat-chip{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:8px;background:#f8fafc}
+</style>
+
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <div>
+    <h4 class="fw-bold mb-0">🛍️ Store Overview</h4>
+    <p class="text-muted mb-0 mt-1">Products, orders and store rules for the E-commerce + MLM plan.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/admin/store/products/new" class="btn btn-success fw-bold shadow-sm"><i class="bi bi-plus-lg me-1"></i> Add Product</a>
+    <a href="/admin/store/products" class="btn btn-light fw-bold shadow-sm"><i class="bi bi-box-seam me-1"></i> Products</a>
+    <a href="/admin/store/orders" class="btn btn-light fw-bold shadow-sm"><i class="bi bi-truck me-1"></i> Orders</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-2"><div class="st-card st-kpi"><small>Paid orders</small><h3>{{ stats.paid_orders }}</h3></div></div>
+  <div class="col-6 col-md-2"><div class="st-card st-kpi"><small>Gross sales</small><h3>₹{{ "%.0f"|format(stats.gross_sales) }}</h3></div></div>
+  <div class="col-6 col-md-2"><div class="st-card st-kpi"><small>Product margin</small><h3 class="text-success">₹{{ "%.0f"|format(stats.gross_margin) }}</h3></div></div>
+  <div class="col-6 col-md-2"><div class="st-card st-kpi"><small>To ship</small><h3 class="text-primary">{{ stats.to_ship }}</h3></div></div>
+  <div class="col-6 col-md-2"><div class="st-card st-kpi"><small>Awaiting payment</small><h3 class="text-warning">{{ stats.awaiting_payment }}</h3></div></div>
+  <div class="col-6 col-md-2"><div class="st-card st-kpi"><small>Low stock (≤5)</small><h3 class="text-danger">{{ stats.low_stock }}</h3></div></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="st-card h-100">
+      <h6 class="fw-bold mb-3"><i class="bi bi-sliders me-2 text-success"></i>Store rules (soft-coded)</h6>
+      <form method="POST" action="/admin/store/settings">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Plan activation match</label>
+            <select name="activation_match_mode" class="form-select">
+              <option value="exact" {% if settings.activation_match_mode=='exact' %}selected{% endif %}>Exact — cart must equal a plan amount</option>
+              <option value="floor" {% if settings.activation_match_mode=='floor' %}selected{% endif %}>Floor — highest plan reached counts</option>
+            </select>
+            <div class="form-text">Exact: ₹1,800 cart = Starter; ₹2,100 must be adjusted. Floor: ₹2,100 activates Starter.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Prices include GST?</label>
+            <select name="prices_include_gst" class="form-select">
+              <option value="true" {% if settings.prices_include_gst=='true' %}selected{% endif %}>Yes (GST inclusive)</option>
+              <option value="false" {% if settings.prices_include_gst=='false' %}selected{% endif %}>No (GST extra)</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-bold">Shipping fee ₹</label>
+            <input type="number" step="0.01" name="shipping_fee" class="form-control" value="{{ settings.shipping_fee }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-bold">Free shipping above ₹</label>
+            <input type="number" step="0.01" name="free_shipping_above" class="form-control" value="{{ settings.free_shipping_above }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-bold">Min repurchase ₹</label>
+            <input type="number" step="0.01" name="min_repurchase_amount" class="form-control" value="{{ settings.min_repurchase_amount }}">
+          </div>
+          <div class="col-md-12">
+            <label class="form-label small fw-bold">Store name</label>
+            <input type="text" name="store_name" class="form-control" value="{{ settings.store_name }}">
+          </div>
+        </div>
+        <button class="btn btn-dark fw-bold mt-3"><i class="bi bi-save me-1"></i> Save rules</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="st-card h-100">
+      <h6 class="fw-bold mb-3"><i class="bi bi-grid me-2 text-success"></i>Categories</h6>
+      {% for c in categories %}
+      <div class="cat-chip">
+        <div>
+          <strong>{{ c.name }}</strong>
+          <span class="badge bg-light text-dark ms-2">{{ c.product_count }} products</span>
+          {% if not c.is_active %}<span class="badge bg-secondary ms-1">inactive</span>{% endif %}
+          <div class="text-muted small">{{ c.description or '' }}</div>
+        </div>
+        <div class="d-flex gap-1">
+          <a class="btn btn-sm btn-outline-dark" href="/admin/store/products?category={{ c.id }}">View</a>
+          <button class="btn btn-sm btn-outline-secondary" onclick='editCat({{ c|tojson }})'>Edit</button>
+        </div>
+      </div>
+      {% endfor %}
+      <form method="POST" action="/admin/store/categories" class="border-top pt-3 mt-3" id="catForm">
+        <input type="hidden" name="id" id="cat_id">
+        <div class="row g-2">
+          <div class="col-md-4"><input name="name" id="cat_name" class="form-control" placeholder="Category name" required></div>
+          <div class="col-md-4"><input name="description" id="cat_desc" class="form-control" placeholder="Short description"></div>
+          <div class="col-md-2"><input name="sort_order" id="cat_sort" type="number" class="form-control" placeholder="Order" value="0"></div>
+          <div class="col-md-2">
+            <select name="is_active" id="cat_active" class="form-select"><option value="true">Active</option><option value="false">Inactive</option></select>
+          </div>
+        </div>
+        <div class="d-flex gap-2 mt-2">
+          <button class="btn btn-success btn-sm fw-bold" id="catBtn"><i class="bi bi-plus-lg me-1"></i> Add category</button>
+          <button type="button" class="btn btn-light btn-sm" onclick="resetCat()">Clear</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function editCat(c){
+  document.getElementById('cat_id').value=c.id;
+  document.getElementById('cat_name').value=c.name;
+  document.getElementById('cat_desc').value=c.description||'';
+  document.getElementById('cat_sort').value=c.sort_order||0;
+  document.getElementById('cat_active').value=c.is_active?'true':'false';
+  document.getElementById('catBtn').innerHTML='<i class="bi bi-save me-1"></i> Update category';
+  document.getElementById('cat_name').focus();
+}
+function resetCat(){ document.getElementById('catForm').reset(); document.getElementById('cat_id').value='';
+  document.getElementById('catBtn').innerHTML='<i class="bi bi-plus-lg me-1"></i> Add category'; }
+</script>
+{% endblock %}

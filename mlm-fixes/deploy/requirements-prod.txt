@@ -1,0 +1,6 @@
+# Production WSGI server (ONLY needed when serving real traffic behind
+# Nginx — NOT required to run the app in development with `python run.py`).
+# Install separately on your production Linux server:
+#   pip install -r deploy/requirements-prod.txt
+gunicorn==23.0.0
+gevent==24.2.1

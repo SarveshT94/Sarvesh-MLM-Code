@@ -1,0 +1,81 @@
+{% extends "admin/base.html" %}
+{% block title %}Store Orders{% endblock %}
+{% block header_title %}Store — Orders{% endblock %}
+{% block content %}
+<style>
+  .stat-pill{border:1px solid #e2e8f0;border-radius:999px;padding:6px 14px;font-weight:700;font-size:13px;background:#fff;color:#334155;text-decoration:none}
+  .stat-pill.active,.stat-pill:hover{background:#0f172a;color:#fff}
+  .kind-activation{background:#dcfce7;color:#166534}.kind-upgrade{background:#dbeafe;color:#1e40af}.kind-repurchase{background:#f1f5f9;color:#334155}
+  .badge-kind{font-weight:700;border-radius:8px;padding:4px 8px;font-size:11px;text-transform:uppercase}
+</style>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <div>
+    <h4 class="fw-bold mb-0">🚚 Orders</h4>
+    <p class="text-muted mb-0 mt-1">{{ data.total }} orders · Move each order through Confirmed → Packed → Shipped → Delivered.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/admin/store" class="btn btn-light fw-bold shadow-sm"><i class="bi bi-arrow-left me-1"></i> Store</a>
+    <button class="btn btn-success fw-bold shadow-sm" onclick="exportOrders()"><i class="bi bi-file-earmark-excel me-1"></i> Export Excel</button>
+  </div>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a class="stat-pill {% if not args.get('status') %}active{% endif %}" href="/admin/store/orders">All</a>
+  {% for s in flow + ['cancelled'] %}
+  <a class="stat-pill {% if args.get('status')==s %}active{% endif %}" href="/admin/store/orders?status={{ s }}">{{ s|capitalize }} <span class="opacity-75">({{ data.counts.get(s, 0) }})</span></a>
+  {% endfor %}
+  <a class="stat-pill {% if args.get('payment')=='pending' %}active{% endif %}" href="/admin/store/orders?payment=pending">Awaiting payment</a>
+  <a class="stat-pill {% if args.get('payment')=='review' %}active{% endif %}" href="/admin/store/orders?payment=review">Needs review</a>
+</div>
+
+<form class="mb-3 d-flex gap-2" method="GET">
+  <input type="hidden" name="status" value="{{ args.get('status','') }}">
+  <input name="q" value="{{ args.get('q','') }}" class="form-control" style="max-width:360px" placeholder="Order no, member name, phone, email">
+  <button class="btn btn-dark fw-bold"><i class="bi bi-search"></i></button>
+</form>
+
+<div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" id="ordersTbl">
+      <thead class="bg-light text-muted small text-uppercase">
+        <tr><th class="ps-3">Order</th><th>Member</th><th>Type</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th><th class="text-end pe-3"></th></tr>
+      </thead>
+      <tbody>
+        {% for o in data['items'] %}
+        <tr>
+          <td class="ps-3"><div class="fw-bold">{{ o.order_no }}</div><div class="text-muted small">{{ o.created_at.strftime('%d %b %Y, %I:%M %p') if o.created_at else '' }}</div></td>
+          <td><div class="fw-semibold">{{ o.full_name }}</div><div class="text-muted small">#{{ o.user_id }} · {{ o.phone or o.email }}</div></td>
+          <td><span class="badge-kind kind-{{ o.order_kind }}">{{ o.order_kind }}</span>{% if o.plan_name %}<div class="small text-muted mt-1">{{ o.plan_name }}</div>{% endif %}</td>
+          <td>{{ o.item_count }}</td>
+          <td class="fw-bold">₹{{ "%.2f"|format(o.total) }}<div class="small text-muted">{{ o.payment_method }}</div></td>
+          <td>{% if o.payment_status=='paid' %}<span class="badge bg-success">Paid</span>{% elif o.payment_status=='pending' %}<span class="badge bg-warning text-dark">Pending</span>{% elif o.payment_status=='refunded' %}<span class="badge bg-secondary">Refunded</span>{% else %}<span class="badge bg-danger">{{ o.payment_status }}</span>{% endif %}</td>
+          <td>{% set cls = {'placed':'secondary','confirmed':'primary','packed':'info','shipped':'warning','delivered':'success','cancelled':'danger'}[o.order_status] %}<span class="badge bg-{{ cls }}">{{ o.order_status|capitalize }}</span>{% if o.tracking_no %}<div class="small text-muted">{{ o.courier }} {{ o.tracking_no }}</div>{% endif %}</td>
+          <td class="text-end pe-3"><a href="/admin/store/orders/{{ o.id }}" class="btn btn-sm btn-outline-dark">Open</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center text-muted py-5">No orders found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if data.pages > 1 %}
+  <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+    <span class="text-muted small">Page {{ data.page }} of {{ data.pages }}</span>
+    <div>{% if data.page > 1 %}<a class="btn btn-sm btn-light" href="?page={{ data.page-1 }}&status={{ args.get('status','') }}&q={{ args.get('q','') }}">‹ Prev</a>{% endif %}
+    {% if data.page < data.pages %}<a class="btn btn-sm btn-light" href="?page={{ data.page+1 }}&status={{ args.get('status','') }}&q={{ args.get('q','') }}">Next ›</a>{% endif %}</div>
+  </div>
+  {% endif %}
+</div>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+function exportOrders(){
+  if(typeof XLSX==='undefined') return alert('Excel library blocked.');
+  const rows=[["Order","Date","Member","Contact","Type","Items","Total","Payment","Status"]];
+  document.querySelectorAll('#ordersTbl tbody tr').forEach(tr=>{
+    const td=tr.querySelectorAll('td'); if(td.length<8) return;
+    rows.push([td[0].querySelector('.fw-bold')?.innerText, td[0].querySelector('.small')?.innerText, td[1].querySelector('.fw-semibold')?.innerText, td[1].querySelector('.small')?.innerText, td[2].innerText.trim(), td[3].innerText.trim(), td[4].innerText.trim().split('\n')[0], td[5].innerText.trim(), td[6].innerText.trim().split('\n')[0]]);
+  });
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Orders'); XLSX.writeFile(wb,'RK_Trendz_Store_Orders.xlsx');
+}
+</script>
+{% endblock %}

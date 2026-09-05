@@ -152,6 +152,15 @@
             <a href="/admin/packages" class="{% if request.path == '/admin/packages' %}active{% endif %}">
                 <i class="bi bi-box-seam-fill"></i> Manage Plans & Images
             </a>
+            <a href="/admin/store" class="{% if request.path == '/admin/store' %}active{% endif %}">
+                <i class="bi bi-shop"></i> Store Dashboard
+            </a>
+            <a href="/admin/store/products" class="{% if request.path.startswith('/admin/store/products') %}active{% endif %}">
+                <i class="bi bi-box-seam"></i> Products & Categories
+            </a>
+            <a href="/admin/store/orders" class="{% if request.path.startswith('/admin/store/orders') %}active{% endif %}">
+                <i class="bi bi-truck"></i> Store Orders & Tracking
+            </a>
             <a href="/admin/ranks" class="{% if request.path == '/admin/ranks' %}active{% endif %}">
                 <i class="bi bi-trophy-fill"></i> Rank Rules
             </a>

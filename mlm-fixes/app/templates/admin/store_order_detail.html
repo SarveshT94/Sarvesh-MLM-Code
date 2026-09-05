@@ -1,0 +1,118 @@
+{% extends "admin/base.html" %}
+{% block title %}Order {{ o.order_no }}{% endblock %}
+{% block header_title %}Store — Order {{ o.order_no }}{% endblock %}
+{% block content %}
+<style>
+  .card-x{background:#fff;border-radius:16px;box-shadow:0 4px 14px rgba(0,0,0,.06);padding:20px}
+  .steps{display:flex;gap:6px;flex-wrap:wrap}
+  .step{flex:1;min-width:110px;text-align:center;padding:10px 6px;border-radius:12px;background:#f1f5f9;color:#64748b;font-weight:700;font-size:12px;text-transform:uppercase}
+  .step.done{background:#dcfce7;color:#166534}.step.cur{background:#0f172a;color:#fff}
+  .itm img{width:60px;height:60px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0;background:#f8fafc}
+  .tl{border-left:2px solid #e2e8f0;padding-left:14px;margin-left:6px}
+  .tl div{position:relative;margin-bottom:12px}
+  .tl div::before{content:"";position:absolute;left:-20px;top:5px;width:10px;height:10px;border-radius:50%;background:#10b981}
+</style>
+
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <div>
+    <h4 class="fw-bold mb-0">{{ o.order_no }}
+      <span class="badge bg-{{ {'placed':'secondary','confirmed':'primary','packed':'info','shipped':'warning','delivered':'success','cancelled':'danger'}[o.order_status] }} ms-2">{{ o.order_status|capitalize }}</span>
+      <span class="badge bg-{{ 'success' if o.payment_status=='paid' else 'warning text-dark' if o.payment_status=='pending' else 'secondary' }} ms-1">{{ o.payment_status|capitalize }}</span>
+    </h4>
+    <p class="text-muted mb-0 mt-1">Placed {{ o.created_at.strftime('%d %b %Y, %I:%M %p') if o.created_at else '' }} · <strong>{{ o.order_kind|capitalize }}</strong>{% if o.plan_name %} → {{ o.plan_name }} plan{% endif %} · Paid via {{ o.payment_method }}</p>
+  </div>
+  <a href="/admin/store/orders" class="btn btn-light fw-bold shadow-sm"><i class="bi bi-arrow-left me-1"></i> Orders</a>
+</div>
+
+{% if o.order_status != 'cancelled' %}
+<div class="card-x mb-3">
+  {% set idx = flow.index(o.order_status) if o.order_status in flow else -1 %}
+  <div class="steps mb-3">
+    {% for s in flow %}<div class="step {% if loop.index0 < idx %}done{% elif loop.index0 == idx %}cur{% endif %}">{{ s }}</div>{% endfor %}
+  </div>
+  {% if o.payment_status == 'paid' and o.order_status != 'delivered' %}
+  {% set nxt = flow[idx+1] if idx+1 < flow|length else None %}
+  <form method="POST" action="/admin/store/orders/{{ o.id }}/status" class="d-flex flex-wrap gap-2 align-items-end">
+    <input type="hidden" name="status" value="{{ nxt }}">
+    {% if nxt == 'shipped' %}
+      <div><label class="small fw-bold text-muted">Courier</label><input name="courier" class="form-control" placeholder="Delhivery / DTDC / India Post" required></div>
+      <div><label class="small fw-bold text-muted">Tracking no.</label><input name="tracking_no" class="form-control" placeholder="AWB number" required></div>
+    {% endif %}
+    <div style="min-width:220px"><label class="small fw-bold text-muted">Note (optional)</label><input name="note" class="form-control" placeholder="Visible in order timeline"></div>
+    <button class="btn btn-dark fw-bold"><i class="bi bi-arrow-right-circle me-1"></i> Mark {{ nxt|capitalize }}</button>
+  </form>
+  {% elif o.payment_status != 'paid' %}
+  <div class="d-flex flex-wrap gap-2 align-items-center">
+    <div class="alert alert-warning mb-0 py-2 flex-grow-1"><i class="bi bi-hourglass-split me-1"></i> Awaiting online payment of <strong>₹{{ "%.2f"|format(o.total - o.wallet_paid) }}</strong>{% if o.wallet_paid %} (₹{{ "%.2f"|format(o.wallet_paid) }} already taken from wallet){% endif %}.</div>
+    <form method="POST" action="/admin/store/orders/{{ o.id }}/mark-paid" onsubmit="return confirm('Confirm you have RECEIVED this payment? Plan benefits & commissions will be paid immediately.')">
+      <button class="btn btn-success fw-bold"><i class="bi bi-cash-coin me-1"></i> Mark payment received</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card-x">
+      <h6 class="fw-bold mb-3"><i class="bi bi-bag me-2 text-success"></i>Items</h6>
+      <table class="table align-middle">
+        <thead class="text-muted small text-uppercase"><tr><th>Product</th><th>SKU</th><th class="text-center">Qty</th><th class="text-end">Price</th><th class="text-end">Cost</th><th class="text-end">GST</th><th class="text-end">Total</th></tr></thead>
+        <tbody>
+          {% for it in o['items'] %}
+          <tr class="itm">
+            <td><div class="d-flex align-items-center gap-2">{% if it.image_url %}<img src="{{ it.image_url }}" onerror="this.style.display='none'">{% endif %}<div><div class="fw-bold">{{ it.product_name }}</div><div class="small text-muted">{{ it.variant_label }}</div></div></div></td>
+            <td class="small text-muted">{{ it.sku }}</td>
+            <td class="text-center">{{ it.qty }}</td>
+            <td class="text-end">₹{{ "%.2f"|format(it.unit_price) }}</td>
+            <td class="text-end text-muted">₹{{ "%.2f"|format(it.unit_cost) }}</td>
+            <td class="text-end text-muted">{{ it.gst_percent }}%</td>
+            <td class="text-end fw-bold">₹{{ "%.2f"|format(it.line_total) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><td colspan="6" class="text-end text-muted">Subtotal (incl. GST ₹{{ "%.2f"|format(o.gst_amount) }})</td><td class="text-end">₹{{ "%.2f"|format(o.subtotal) }}</td></tr>
+          <tr><td colspan="6" class="text-end text-muted">Shipping</td><td class="text-end">₹{{ "%.2f"|format(o.shipping_fee) }}</td></tr>
+          <tr class="fw-bold fs-5"><td colspan="6" class="text-end">Total</td><td class="text-end">₹{{ "%.2f"|format(o.total) }}</td></tr>
+          <tr class="text-muted small"><td colspan="6" class="text-end">Wallet ₹{{ "%.2f"|format(o.wallet_paid) }} · Online ₹{{ "%.2f"|format(o.online_paid) }}{% if o.gateway_payment_id %} · {{ o.gateway_payment_id }}{% endif %}</td><td class="text-end">Cost ₹{{ "%.2f"|format(o.cost_total) }} → Margin ₹{{ "%.2f"|format(o.subtotal - o.cost_total) }}</td></tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="card-x mt-3">
+      <h6 class="fw-bold mb-3"><i class="bi bi-clock-history me-2 text-success"></i>Timeline</h6>
+      <div class="tl">
+        {% for e in o.events %}<div><strong>{{ e.status|capitalize }}</strong> <span class="text-muted small">— {{ e.created_at.strftime('%d %b %Y, %I:%M %p') if e.created_at else '' }} · {{ e.actor }}</span>{% if e.note %}<div class="small text-muted">{{ e.note }}</div>{% endif %}</div>{% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card-x">
+      <h6 class="fw-bold mb-2"><i class="bi bi-person me-2 text-success"></i>Member</h6>
+      <div class="fw-bold">{{ o.full_name }} <span class="text-muted">#{{ o.user_id }}</span></div>
+      <div class="small text-muted">{{ o.email }}<br>{{ o.phone }}</div>
+      <a href="/admin/network/profile/{{ o.user_id }}" class="btn btn-sm btn-outline-dark mt-2">View profile</a>
+    </div>
+    <div class="card-x mt-3">
+      <h6 class="fw-bold mb-2"><i class="bi bi-geo-alt me-2 text-success"></i>Ship to</h6>
+      {% set a = o.shipping_address or {} %}
+      <div class="fw-bold">{{ a.full_name }}</div>
+      <div class="small">{{ a.line1 }}{% if a.line2 %}, {{ a.line2 }}{% endif %}{% if a.landmark %}<br>Near {{ a.landmark }}{% endif %}<br>{{ a.city }}, {{ a.state }} – {{ a.pincode }}<br>📞 {{ a.phone }}</div>
+      {% if o.customer_note %}<div class="alert alert-light border small mt-2 mb-0"><strong>Note:</strong> {{ o.customer_note }}</div>{% endif %}
+    </div>
+    {% if o.order_status not in ('delivered','cancelled') %}
+    <div class="card-x mt-3">
+      <h6 class="fw-bold mb-2 text-danger"><i class="bi bi-x-octagon me-2"></i>Cancel order</h6>
+      <p class="small text-muted">Restores stock, refunds all paid money to the member's wallet, and reverses any commissions paid for this order.</p>
+      <form method="POST" action="/admin/store/orders/{{ o.id }}/cancel" onsubmit="return confirm('Cancel this order and refund?')">
+        <input name="reason" class="form-control form-control-sm mb-2" placeholder="Reason (shown to member)">
+        <button class="btn btn-outline-danger btn-sm fw-bold w-100">Cancel &amp; refund</button>
+      </form>
+    </div>
+    {% endif %}
+    {% if o.admin_note %}<div class="alert alert-secondary small mt-3">{{ o.admin_note }}</div>{% endif %}
+  </div>
+</div>
+{% endblock %}

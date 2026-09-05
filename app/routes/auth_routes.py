@@ -192,11 +192,9 @@ def get_me():
                 cur.execute("SELECT is_active FROM users WHERE id = %s", (current_user.id,))
                 db_user = cur.fetchone()
                 
-                # If user doesn't exist or is deactivated, kill their session immediately
-                if not db_user or not db_user['is_active']:
-                    logout_user()
-                    session.clear()
-                    return jsonify({"status": "error", "message": "Your account has been deactivated."}), 401
+                # E-COMMERCE: pre-activation members stay logged in so they can shop
+                # and activate. is_active=False only means: no plan purchased yet.
+                is_active = bool(db_user['is_active'])
 
             return jsonify({
                 "status": "success",
@@ -205,6 +203,7 @@ def get_me():
                     "full_name": current_user.full_name,
                     "email": current_user.email,
                     "role_id": current_user.role_id,
+                    "is_active": is_active,
                     "phone": getattr(current_user, 'phone', ''),
                     "referral_code": getattr(current_user, 'referral_code', '')
                 }

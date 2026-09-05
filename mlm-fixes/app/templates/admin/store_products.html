@@ -1,0 +1,84 @@
+{% extends "admin/base.html" %}
+{% block title %}Products{% endblock %}
+{% block header_title %}Store — Products{% endblock %}
+{% block content %}
+<style>
+  .pimg{width:56px;height:56px;object-fit:cover;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0}
+  .ph{width:56px;height:56px;border-radius:10px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;color:#94a3b8;border:1px solid #e2e8f0}
+</style>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <div>
+    <h4 class="fw-bold mb-0">📦 Products</h4>
+    <p class="text-muted mb-0 mt-1">{{ data.total }} products · Members build a cart from these to reach a plan amount.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/admin/store" class="btn btn-light fw-bold shadow-sm"><i class="bi bi-arrow-left me-1"></i> Store</a>
+    <a href="/admin/store/products/new" class="btn btn-success fw-bold shadow-sm"><i class="bi bi-plus-lg me-1"></i> Add Product</a>
+  </div>
+</div>
+
+<form class="card border-0 shadow-sm rounded-4 mb-3" method="GET">
+  <div class="card-body d-flex flex-wrap gap-2 align-items-end">
+    <div style="min-width:220px"><label class="small fw-bold text-muted">Search</label>
+      <input name="q" value="{{ args.get('q','') }}" class="form-control" placeholder="Name, brand..."></div>
+    <div><label class="small fw-bold text-muted">Category</label>
+      <select name="category" class="form-select">
+        <option value="">All</option>
+        {% for c in categories %}<option value="{{ c.id }}" {% if args.get('category')|string == c.id|string %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="small fw-bold text-muted">Sort</label>
+      <select name="sort" class="form-select">
+        {% for k,v in [('newest','Newest'),('name','Name'),('price_asc','Price ↑'),('price_desc','Price ↓')] %}
+        <option value="{{ k }}" {% if args.get('sort')==k %}selected{% endif %}>{{ v }}</option>{% endfor %}
+      </select></div>
+    <button class="btn btn-dark fw-bold"><i class="bi bi-funnel me-1"></i> Filter</button>
+  </div>
+</form>
+
+<div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="bg-light text-muted small text-uppercase">
+        <tr><th class="ps-3">Product</th><th>Category</th><th>Price</th><th>Variants</th><th>Stock</th><th>GST</th><th>Status</th><th class="text-end pe-3">Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for p in data['items'] %}
+        <tr>
+          <td class="ps-3">
+            <div class="d-flex align-items-center gap-3">
+              {% if p.image_url %}<img class="pimg" src="{{ p.image_url }}" onerror="this.outerHTML='<div class=ph><i class=\'bi bi-image\'></i></div>'">
+              {% else %}<div class="ph"><i class="bi bi-image"></i></div>{% endif %}
+              <div><div class="fw-bold">{{ p.name }}</div><div class="text-muted small">{{ p.brand or '' }} {% if p.is_featured %}<span class="badge bg-warning text-dark">Featured</span>{% endif %}</div></div>
+            </div>
+          </td>
+          <td>{{ p.category_name }}</td>
+          <td class="fw-bold">₹{{ "%.0f"|format(p.min_price or 0) }}{% if p.max_price and p.max_price != p.min_price %} – ₹{{ "%.0f"|format(p.max_price) }}{% endif %}
+            {% if p.mrp and p.mrp > (p.min_price or 0) %}<div class="text-muted small text-decoration-line-through">₹{{ "%.0f"|format(p.mrp) }}</div>{% endif %}</td>
+          <td>{{ p.variant_count }}</td>
+          <td>{% if p.total_stock <= 0 %}<span class="badge bg-danger">Out of stock</span>{% elif p.total_stock <= 5 %}<span class="badge bg-warning text-dark">{{ p.total_stock }} left</span>{% else %}{{ p.total_stock }}{% endif %}</td>
+          <td>{{ p.gst_percent }}%</td>
+          <td>{% if p.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}</td>
+          <td class="text-end pe-3">
+            <a href="/admin/store/products/{{ p.id }}" class="btn btn-sm btn-outline-dark"><i class="bi bi-pencil"></i> Edit</a>
+            <form method="POST" action="/admin/store/products/{{ p.id }}/delete" class="d-inline" onsubmit="return confirm('Delete/archive this product?')">
+              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center text-muted py-5">No products yet. <a href="/admin/store/products/new">Add your first product</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if data.pages > 1 %}
+  <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+    <span class="text-muted small">Page {{ data.page }} of {{ data.pages }}</span>
+    <div>
+      {% if data.page > 1 %}<a class="btn btn-sm btn-light" href="?page={{ data.page-1 }}&q={{ args.get('q','') }}&category={{ args.get('category','') }}&sort={{ args.get('sort','') }}">‹ Prev</a>{% endif %}
+      {% if data.page < data.pages %}<a class="btn btn-sm btn-light" href="?page={{ data.page+1 }}&q={{ args.get('q','') }}&category={{ args.get('category','') }}&sort={{ args.get('sort','') }}">Next ›</a>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

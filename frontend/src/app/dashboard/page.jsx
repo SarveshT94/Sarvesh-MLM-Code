@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { requestProfileUpdate, verifyProfileOtp } from "@/services/profile";
 import { fetchWalletData, submitWithdrawal, submitP2PTransfer } from "@/services/wallet";
 import { fetchNetworkData, fetchUplineData } from "@/services/team";
+import Storefront from "@/components/store/Storefront";
+import MyStoreOrders from "@/components/store/MyStoreOrders";
+import MyTeam from "@/components/team/MyTeam";
 import { fetchPackages, purchasePlan, fetchCompensationPlan, fetchUserOrders } from "@/services/package";
 import { fetchUserRank } from "@/services/gamification"; 
 import { fetchTickets, createTicket } from "@/services/support"; 
@@ -63,8 +66,8 @@ export default function DashboardPage() {
     { name: "KYC Verification", icon: FileCheck },
     { name: "My Network Tree", icon: Users },
     { name: "Wallet & Payouts", icon: Wallet },
-    { name: "Product Catalog", icon: ShoppingBag },
-    { name: "My Orders & Invoices", icon: Receipt },
+    { name: "Product Catalog", label: "Shop", icon: ShoppingBag },
+    { name: "My Orders & Invoices", label: "My Orders", icon: Receipt },
     { name: "Help & Support", icon: LifeBuoy },
   ];
 
@@ -134,7 +137,7 @@ export default function DashboardPage() {
           {[
             { title: "Total Wallet Balance", value: "Check Wallet", icon: Wallet, color: "emerald", tab: "Wallet & Payouts", btnText: "Request Withdrawal" },
             { title: "Active Downline", value: "View Network", icon: Users, color: "blue", tab: "My Network Tree", btnText: "View Network Tree" },
-            { title: "Current Plan", value: "Free Tier", icon: CheckCircle2, color: "purple", tab: "Product Catalog", btnText: "Upgrade Plan" }
+            { title: "Current Plan", value: "Free Tier", icon: CheckCircle2, color: "purple", tab: "Product Catalog", btnText: "Shop & Activate" }
           ].map((card, idx) => (
             <div key={idx} className="bg-white overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border border-slate-100 rounded-[2rem] group">
               <div className="p-6">
@@ -1479,7 +1482,7 @@ export default function DashboardPage() {
               }`}
             >
               <item.icon className={`mr-4 h-[1.15rem] w-[1.15rem] ${activeTab === item.name ? "text-white" : "text-slate-500"}`} />
-              {item.name}
+              {item.label || item.name}
             </button>
           ))}
         </div>
@@ -1510,9 +1513,9 @@ export default function DashboardPage() {
           {activeTab === "My Profile" && <ProfileTab />}
           {activeTab === "KYC Verification" && <KycTab />}
           {activeTab === "Wallet & Payouts" && <WalletTab />}
-          {activeTab === "My Network Tree" && <NetworkTab />}
-          {activeTab === "Product Catalog" && <ProductCatalogTab />}
-          {activeTab === "My Orders & Invoices" && <OrdersTab />}
+          {activeTab === "My Network Tree" && <><MyTeam /><NetworkTab /></>}
+          {activeTab === "Product Catalog" && <Storefront onOrderPlaced={() => setActiveTab("My Orders & Invoices")} />}
+          {activeTab === "My Orders & Invoices" && <MyStoreOrders />}
           {activeTab === "Help & Support" && <SupportTab />}
         </div>
       </main>

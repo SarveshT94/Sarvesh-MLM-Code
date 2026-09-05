@@ -8,6 +8,8 @@ import json
 from werkzeug.utils import secure_filename
 from flask import current_app
 from functools import wraps
+from app.services.team_service import get_user_purchase_history
+
 
 from app.db import get_cursor
 from app.services.user_service import authenticate_user
@@ -574,17 +576,21 @@ def check_session():
             with get_cursor() as cur:
                 cur.execute("SELECT is_active FROM users WHERE id = %s", (current_user.id,))
                 db_user = cur.fetchone()
-                if not db_user or not db_user['is_active']:
+                # E-COMMERCE: not-yet-activated members stay logged in so they can
+                # shop and activate. Admin deactivation still blocks MLM features.
+                if not db_user:
                     logout_user()
                     session.clear()
-                    return jsonify({"success": False, "message": "Account deactivated."}), 401
+                    return jsonify({"success": False, "message": "Account not found."}), 401
+                is_active = bool(db_user['is_active'])
         except Exception:
             pass
         return jsonify({"success": True, "user": {
             "id": current_user.id,
             "email": current_user.email,
-            "full_name": current_user.full_name
-        }}), 200
+            "full_name": current_user.full_name,
+            "is_active": is_active
+            }}), 200
     return jsonify({"success": False, "message": "Unauthorized"}), 401
 
 
@@ -801,22 +807,22 @@ def admin_ranks_page():
 
 @main.route('/webhook/payment', methods=['POST'])
 def payment_webhook():
-    """Server-to-Server Payment Gateway Webhook"""
-    from app.services.activation_service import activate_user_package 
+    """Server-to-Server Payment Gateway Webhook (Razorpay).
+    Settles STORE orders (e-commerce checkout) and legacy package payments."""
+    from app.services import store_service
     payload = request.get_data(as_text=True)
     received_signature = request.headers.get('X-Razorpay-Signature')
-    
+
     if not received_signature:
         return jsonify({"status": "error", "message": "Unauthorized"}), 401
 
     try:
-        secret = current_app.config.get('PAYMENT_GATEWAY_SECRET', 'YOUR_TEST_SECRET_KEY')
-        expected_signature = hmac.new(
-            bytes(secret, 'utf-8'), 
-            msg=bytes(payload, 'utf-8'), 
-            digestmod=hashlib.sha256
-        ).hexdigest()
-
+        secret = current_app.config.get('PAYMENT_GATEWAY_SECRET') or ''
+        if not secret:
+            logger.error("Webhook secret not configured (RAZORPAY_WEBHOOK_SECRET)")
+            return jsonify({"status": "error", "message": "Webhook not configured"}), 500
+        expected_signature = hmac.new(bytes(secret, 'utf-8'), msg=bytes(payload, 'utf-8'),
+                                      digestmod=hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected_signature, received_signature):
             return jsonify({"status": "error", "message": "Invalid Signature"}), 400
 
@@ -825,13 +831,18 @@ def payment_webhook():
 
         if event_type in ['payment.captured', 'order.paid']:
             payment_entity = data['payload']['payment']['entity']
-            user_id = payment_entity['notes']['user_id']
-            package_id = payment_entity['notes']['package_id']
-            
-            activate_user_package(user_id=user_id, package_id=package_id, payment_method="ONLINE")
-            
+            notes = payment_entity.get('notes') or {}
+            gateway_order_id = notes.get('gateway_order_id') or payment_entity.get('order_id')
+            payment_id = payment_entity.get('id')
+            amount_paise = payment_entity.get('amount')
+            if gateway_order_id and str(gateway_order_id).startswith('order_RKT'):
+                store_service.confirm_online_payment(gateway_order_id, payment_id, amount_paise)
+            elif notes.get('user_id') and notes.get('package_id'):
+                from app.services.package_service import purchase_package
+                purchase_package(int(notes['user_id']), int(notes['package_id']), payment_ref=payment_id)
         return jsonify({"status": "success"}), 200
     except Exception as e:
+        logger.error(f"Webhook processing failed: {str(e)}")
         return jsonify({"status": "error", "message": "Internal Server Error"}), 500
 
 
@@ -859,55 +870,6 @@ def get_my_wallet_history():
         return jsonify({"success": True, "transactions": transactions}), 200
     except Exception as e:
         return jsonify({"success": False, "message": "Failed to load history"}), 500
-
-
-@main.route("/api/team/me", methods=["GET"])
-@login_required
-def get_my_team_metadata():
-    """Securely fetches the logged-in user's team size and directs."""
-    try:
-        direct_team = get_level_1_team(current_user.id)
-        total_team  = get_total_team_count(current_user.id)
-        return jsonify({
-            "success": True, 
-            "total_team": total_team, 
-            "direct_team": direct_team
-        }), 200
-    except Exception as e:
-        return jsonify({"success": False, "message": "Failed to load team data"}), 500
-
-
-@main.route("/api/genealogy/me", methods=["GET"])
-@login_required
-def get_my_genealogy_tree():
-    """Securely fetches the logged-in user's network tree using existing cached logic."""
-    try:
-        from app.services.admin.tree_service import get_user_tree
-        tree_json = get_user_tree(current_user.id)
-        
-        if not tree_json:
-            return jsonify({"success": False, "message": "Tree context resolution failed"}), 404
-            
-        def flatten_and_tag_levels(nodes, current_level=1):
-            flat = []
-            for node in nodes:
-                flat.append({
-                    "id": node["user_id"],
-                    "full_name": node["full_name"],
-                    "level": current_level,
-                    "is_active": node["is_active"],
-                    "created_at": None
-                })
-                if node.get("children"):
-                    flat.extend(flatten_and_tag_levels(node["children"], current_level + 1))
-            return flat
-
-        children_list = tree_json.get("children", [])
-        processed_tree = flatten_and_tag_levels(children_list)
-        return jsonify({"success": True, "team_tree": processed_tree}), 200
-        
-    except Exception as e:
-        return jsonify({"success": False, "message": "Failed to compile network architecture"}), 500
 
 
 # ============================================================================
@@ -962,3 +924,61 @@ def create_payment_order():
     except Exception as e:
         logger.error(f"Error initializing checkout window payload: {str(e)}")
         return jsonify({"success": False, "message": "Internal gateway initialization failure"}), 500
+
+
+@main.route('/admin/user/<int:user_id>/drawer_data', methods=['GET'])
+@login_required
+def get_user_drawer_data(user_id):
+    """Fetches comprehensive drawer data including sponsor details, network counts, and purchases."""
+    if getattr(current_user, 'role_id', None) != 1: 
+        return jsonify({"status": "error", "message": "Unauthorized"}), 403
+    try:
+        from app.db import get_cursor
+        with get_cursor() as cur:
+            # 1. Fetch user and sponsor info
+            cur.execute("""
+                SELECT u.id, u.email, u.phone, u.alternate_phone, u.address, 
+                       u.created_at, u.is_active, u."rank",
+                       s.id as sponsor_id, s.full_name as sponsor_name, 
+                       s."rank" as sponsor_rank, s.created_at as sponsor_date
+                FROM users u
+                LEFT JOIN users s ON u.sponsor_id = s.id
+                WHERE u.id = %s
+            """, (user_id,))
+            user_data = dict(cur.fetchone() or {})
+            
+            # 2. Get accurate Directs & Total Downline
+            cur.execute("SELECT COUNT(*) as c FROM users WHERE sponsor_id = %s", (user_id,))
+            directs = cur.fetchone()['c']
+
+            cur.execute("""
+                WITH RECURSIVE downline AS (
+                    SELECT id FROM users WHERE sponsor_id = %s
+                    UNION ALL
+                    SELECT u.id FROM users u INNER JOIN downline d ON u.sponsor_id = d.id
+                ) SELECT COUNT(*) as c FROM downline
+            """, (user_id,))
+            downline = cur.fetchone()['c']
+
+            # 3. Get exact Purchase History
+            cur.execute("""
+                SELECT p.name as package_name, p.price, o.status, o.created_at
+                FROM orders o JOIN subscription_plans p ON o.package_id = p.id
+                WHERE o.user_id = %s ORDER BY o.created_at DESC
+            """, (user_id,))
+            purchases = [dict(r) for r in cur.fetchall()]
+
+            # Clean dates for JSON serialization
+            if user_data.get('created_at'): user_data['created_at'] = str(user_data['created_at'])[:10]
+            if user_data.get('sponsor_date'): user_data['sponsor_date'] = str(user_data['sponsor_date'])[:10]
+            for p in purchases: p['created_at'] = str(p['created_at'])[:10]
+
+            return jsonify({
+                "status": "success",
+                "user": user_data,
+                "directs": directs,
+                "downline": downline,
+                "purchases": purchases
+            })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500

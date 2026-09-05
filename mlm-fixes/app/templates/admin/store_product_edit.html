@@ -1,0 +1,139 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ 'Edit' if product else 'New' }} Product{% endblock %}
+{% block header_title %}Store — {{ 'Edit Product' if product else 'New Product' }}{% endblock %}
+{% block content %}
+<style>
+  .card-x{background:#fff;border-radius:16px;box-shadow:0 4px 14px rgba(0,0,0,.06);padding:20px}
+  .gal{display:flex;flex-wrap:wrap;gap:10px}
+  .gal .g{position:relative;width:110px;height:110px;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc}
+  .gal img{width:100%;height:100%;object-fit:cover}
+  .gal form{position:absolute;top:4px;right:4px}
+  .vt td,.vt th{vertical-align:middle}
+  .attr-help{font-size:12px;color:#64748b}
+</style>
+
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <div>
+    <h4 class="fw-bold mb-0">{{ product.name if product else 'Add a product' }}</h4>
+    <p class="text-muted mb-0 mt-1">Selling price is what the member pays; <strong>cost price</strong> feeds the P&amp;L (gross profit).</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/admin/store/products" class="btn btn-light fw-bold shadow-sm"><i class="bi bi-arrow-left me-1"></i> Products</a>
+    {% if product %}<a target="_blank" href="/api/store/products/{{ product.slug }}" class="btn btn-outline-dark fw-bold shadow-sm"><i class="bi bi-box-arrow-up-right me-1"></i> API view</a>{% endif %}
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- ============ PRODUCT DETAILS ============ -->
+  <div class="col-lg-7">
+    <div class="card-x">
+      <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2 text-success"></i>Details</h6>
+      <form method="POST" action="/admin/store/products">
+        {% if product %}<input type="hidden" name="id" value="{{ product.id }}">{% endif %}
+        <div class="row g-3">
+          <div class="col-md-8"><label class="form-label small fw-bold">Product name *</label>
+            <input name="name" class="form-control" required value="{{ product.name if product else '' }}"></div>
+          <div class="col-md-4"><label class="form-label small fw-bold">Category *</label>
+            <select name="category_id" class="form-select" required>
+              {% for c in categories %}<option value="{{ c.id }}" {% if product and product.category_id==c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+            </select></div>
+          <div class="col-md-6"><label class="form-label small fw-bold">Brand</label>
+            <input name="brand" class="form-control" value="{{ product.brand if product and product.brand else '' }}"></div>
+          <div class="col-md-3"><label class="form-label small fw-bold">GST %</label>
+            <input name="gst_percent" type="number" step="0.01" class="form-control" value="{{ product.gst_percent if product else 18 }}"></div>
+          <div class="col-md-3"><label class="form-label small fw-bold">HSN code</label>
+            <input name="hsn_code" class="form-control" value="{{ product.hsn_code if product and product.hsn_code else '' }}"></div>
+          <div class="col-12"><label class="form-label small fw-bold">Description</label>
+            <textarea name="description" rows="4" class="form-control">{{ product.description if product and product.description else '' }}</textarea></div>
+          <div class="col-12"><label class="form-label small fw-bold">Highlights (one per line)</label>
+            <textarea name="highlights" rows="3" class="form-control" placeholder="100% cotton&#10;Machine washable">{{ product.highlights if product and product.highlights else '' }}</textarea></div>
+          <div class="col-md-6">
+            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="is_active" value="true" id="act" {% if not product or product.is_active %}checked{% endif %}><label class="form-check-label fw-bold" for="act">Active (visible in store)</label></div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="is_featured" value="true" id="feat" {% if product and product.is_featured %}checked{% endif %}><label class="form-check-label fw-bold" for="feat">Featured on home</label></div>
+          </div>
+        </div>
+        <button class="btn btn-success fw-bold mt-3"><i class="bi bi-save me-1"></i> {{ 'Save changes' if product else 'Create product' }}</button>
+      </form>
+    </div>
+
+    {% if product %}
+    <!-- ============ VARIANTS ============ -->
+    <div class="card-x mt-3">
+      <h6 class="fw-bold mb-1"><i class="bi bi-list-check me-2 text-success"></i>Variants, price &amp; stock</h6>
+      <div class="attr-help mb-3">Each size/colour is a variant with its own SKU, price, cost and stock. Attributes format: <code>size:M, color:Blue</code> (leave blank for a single standard variant).</div>
+      <div class="table-responsive">
+        <table class="table table-sm vt align-middle">
+          <thead class="text-muted small text-uppercase"><tr><th>SKU</th><th>Attributes</th><th>Selling ₹</th><th>MRP ₹</th><th>Cost ₹</th><th>Stock</th><th>Active</th><th></th></tr></thead>
+          <tbody>
+            {% for v in product.variants %}
+            <tr>
+              <form method="POST" action="/admin/store/products/{{ product.id }}/variants">
+                <input type="hidden" name="id" value="{{ v.id }}">
+                <td><input name="sku" class="form-control form-control-sm" value="{{ v.sku }}"></td>
+                <td><input name="attributes" class="form-control form-control-sm" value="{% for k,val in v.attributes.items() %}{{ k }}:{{ val }}{% if not loop.last %}, {% endif %}{% endfor %}"></td>
+                <td style="width:110px"><input name="price" type="number" step="0.01" class="form-control form-control-sm" value="{{ v.price }}"></td>
+                <td style="width:110px"><input name="mrp" type="number" step="0.01" class="form-control form-control-sm" value="{{ v.mrp if v.mrp is not none else '' }}"></td>
+                <td style="width:110px"><input name="cost_price" type="number" step="0.01" class="form-control form-control-sm" value="{{ v.cost_price }}"></td>
+                <td style="width:90px"><input name="stock_qty" type="number" class="form-control form-control-sm" value="{{ v.stock_qty }}"></td>
+                <td><select name="is_active" class="form-select form-select-sm"><option value="true" {% if v.is_active %}selected{% endif %}>Yes</option><option value="false" {% if not v.is_active %}selected{% endif %}>No</option></select></td>
+                <td class="text-nowrap"><button class="btn btn-sm btn-dark" title="Save"><i class="bi bi-check-lg"></i></button>
+              </form>
+                <form method="POST" action="/admin/store/products/{{ product.id }}/variants/{{ v.id }}/delete" class="d-inline" onsubmit="return confirm('Delete this variant?')"><button class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button></form></td>
+            </tr>
+            {% endfor %}
+            <tr class="table-light">
+              <form method="POST" action="/admin/store/products/{{ product.id }}/variants">
+                <td><input name="sku" class="form-control form-control-sm" placeholder="auto"></td>
+                <td><input name="attributes" class="form-control form-control-sm" placeholder="size:L, color:Red"></td>
+                <td><input name="price" type="number" step="0.01" class="form-control form-control-sm" placeholder="0.00" required></td>
+                <td><input name="mrp" type="number" step="0.01" class="form-control form-control-sm" placeholder="0.00"></td>
+                <td><input name="cost_price" type="number" step="0.01" class="form-control form-control-sm" placeholder="0.00"></td>
+                <td><input name="stock_qty" type="number" class="form-control form-control-sm" placeholder="0"></td>
+                <td><select name="is_active" class="form-select form-select-sm"><option value="true">Yes</option><option value="false">No</option></select></td>
+                <td><button class="btn btn-sm btn-success fw-bold"><i class="bi bi-plus-lg"></i> Add</button></td>
+              </form>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ============ IMAGES ============ -->
+  <div class="col-lg-5">
+    <div class="card-x">
+      <h6 class="fw-bold mb-3"><i class="bi bi-images me-2 text-success"></i>Product images</h6>
+      {% if product %}
+      <div class="gal mb-3">
+        {% for img in product['images'] %}
+        <div class="g">
+          <img src="{{ img.image_url }}" onerror="this.style.opacity=.2">
+          <form method="POST" action="/admin/store/images/{{ img.id }}/delete" onsubmit="return confirm('Remove image?')"><button class="btn btn-sm btn-danger py-0 px-1"><i class="bi bi-x"></i></button></form>
+        </div>
+        {% else %}<div class="text-muted small">No images yet. Upload professional product photos (JPG/PNG/WebP).</div>{% endfor %}
+      </div>
+      <form method="POST" action="/admin/store/products/{{ product.id }}/images" enctype="multipart/form-data">
+        <input type="file" name="images" accept="image/*" multiple class="form-control mb-2" required>
+        <select name="variant_id" class="form-select mb-2"><option value="">For all variants</option>{% for v in product.variants %}<option value="{{ v.id }}">{{ v.label }} ({{ v.sku }})</option>{% endfor %}</select>
+        <button class="btn btn-dark fw-bold w-100"><i class="bi bi-cloud-upload me-1"></i> Upload images</button>
+      </form>
+      {% else %}
+      <div class="alert alert-light border small mb-0">Create the product first, then add variants and images.</div>
+      {% endif %}
+    </div>
+
+    <div class="card-x mt-3">
+      <h6 class="fw-bold mb-2"><i class="bi bi-lightbulb me-2 text-warning"></i>How plan matching works</h6>
+      <ul class="small text-muted mb-0 ps-3">
+        <li>Members add products to a cart. When the cart total equals a plan amount (₹1,800 / ₹3,600 / ₹7,200 / ₹14,400 / ₹28,800) that plan activates or upgrades and all plan benefits are paid.</li>
+        <li>Price products so common combinations land on these amounts (e.g. ₹450, ₹600, ₹900, ₹1,200, ₹1,800).</li>
+        <li>Later orders of any amount are repurchases (repurchase cashback + repurchase referral).</li>
+        <li>Cost price is never shown to members; it is only used for profit reporting.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

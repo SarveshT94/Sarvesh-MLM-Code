@@ -1,0 +1,438 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Team Structure{% endblock %}
+{% block header_title %}Team Structure{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <h4 class="fw-bold text-dark mb-0">Team Structure</h4>
+    <p class="text-muted small">View your network tree and downline information</p>
+</div>
+
+<!-- Safe Metrics Calculation -->
+{% set stats = namespace(total=0, active=0, inactive=0) %}
+{% if team_tree %}
+    {% for level, members in team_tree.items() %}
+        {% set stats.total = stats.total + members|length %}
+        {% for m in members %}
+            {% if m.is_active %}{% set stats.active = stats.active + 1 %}
+            {% else %}{% set stats.inactive = stats.inactive + 1 %}{% endif %}
+        {% endfor %}
+    {% endfor %}
+{% endif %}
+{% set directs = team_tree.get(1)|length if team_tree and team_tree.get(1) is not none else 0 %}
+
+<!-- Top Metrics Dashboard (Clickable Audit Drills) -->
+<div class="row g-3 mb-4">
+    <div class="col-md-2" onclick="window.location.href='/admin/user/team/{{ user.id }}'" style="cursor: pointer;">
+        <div class="card border-0 shadow-sm rounded-3 p-3 text-center h-100 metric-hover">
+            <h6 class="text-muted mb-1 small">Total Downline</h6>
+            <h4 class="fw-bold text-primary mb-0"><i class="bi bi-people-fill me-2 opacity-50"></i>{{ stats.total }}</h4>
+        </div>
+    </div>
+    <div class="col-md-2" onclick="window.location.href='/admin/user/team/{{ user.id }}'" style="cursor: pointer;">
+        <div class="card border-0 shadow-sm rounded-3 p-3 text-center h-100 metric-hover">
+            <h6 class="text-muted mb-1 small">Direct Referrals</h6>
+            <h4 class="fw-bold text-warning mb-0"><i class="bi bi-person-plus-fill me-2 opacity-50"></i>{{ directs }}</h4>
+        </div>
+    </div>
+    <div class="col-md-4" onclick="window.location.href='/admin/user/team/{{ user.id }}'" style="cursor: pointer;">
+        <div class="card border border-success-subtle shadow-sm rounded-3 p-3 text-center h-100 bg-light metric-hover">
+            <h6 class="text-success mb-1 small">Total Business</h6>
+            <h4 class="fw-bold text-success mb-0">₹ {{ user.total_business | default('0.00') }}</h4>
+            <div class="text-muted" style="font-size: 10px;">(Self + Team)</div>
+        </div>
+    </div>
+    <div class="col-md-2" onclick="window.location.href='/admin/user/team/{{ user.id }}'" style="cursor: pointer;">
+        <div class="card border-0 shadow-sm rounded-3 p-3 text-center h-100 metric-hover">
+            <h6 class="text-muted mb-1 small">Active Users</h6>
+            <h4 class="fw-bold text-success mb-0"><i class="bi bi-person-check-fill me-2 opacity-50"></i>{{ stats.active }}</h4>
+        </div>
+    </div>
+    <div class="col-md-2" onclick="window.location.href='/admin/user/team/{{ user.id }}'" style="cursor: pointer;">
+        <div class="card border-0 shadow-sm rounded-3 p-3 text-center h-100 metric-hover">
+            <h6 class="text-muted mb-1 small">Inactive Users</h6>
+            <h4 class="fw-bold text-danger mb-0"><i class="bi bi-person-x-fill me-2 opacity-50"></i>{{ stats.inactive }}</h4>
+        </div>
+    </div>
+</div>
+
+<!-- Toolbar (Dropdowns and Arrows Removed) -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="btn-group shadow-sm">
+        <button class="btn btn-primary btn-sm px-4" id="btnTreeView" onclick="toggleView('tree')"><i class="bi bi-diagram-2 me-1"></i> Tree View</button>
+        <button class="btn btn-white btn-sm px-4 border" id="btnListView" onclick="toggleView('list')"><i class="bi bi-list-ul me-1"></i> List View</button>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-white btn-sm border shadow-sm" onclick="exportTableToCSV('team_structure.csv')"><i class="bi bi-download me-1"></i> Export</button>
+    </div>
+</div>
+
+<!-- TREE VIEW CONTAINER -->
+<div id="treeViewContainer" class="card border-0 shadow-sm rounded-4 overflow-auto bg-white p-5 position-relative mb-4" style="min-height: 500px;">
+    <div class="tree text-center w-100 d-flex justify-content-center">
+        {% macro render_node(node, current_level) %}
+        <li>
+            <div class="tree-node bg-white shadow-sm position-relative {% if current_level == 0 %}border-warning border-2{% else %}border-light border{% endif %}" 
+                 data-id="{{ node.id }}" 
+                 data-name="{{ node.full_name }}" 
+                 data-status="{{ 'Active' if node.is_active else 'Inactive' }}"
+                 onclick="openDrawer(this)">
+                
+                {% if current_level == 0 %}
+                    <span class="badge bg-success position-absolute top-0 start-50 translate-middle shadow-sm" style="font-size: 10px;">YOU</span>
+                {% else %}
+                    <span class="position-absolute top-0 start-100 translate-middle p-1 {% if node.is_active %}bg-success{% else %}bg-danger{% endif %} border border-light rounded-circle" style="width: 14px; height: 14px;"></span>
+                {% endif %}
+                
+                {% set avatar = node.profile_image if node.profile_image else 'https://ui-avatars.com/api/?name=' + node.full_name|urlencode + '&background=f1f5f9&color=475569' %}
+                <img src="{{ avatar }}" class="rounded-circle mt-3 mb-2 border {% if current_level == 0 %}border-warning{% else %}border-white{% endif %} shadow-sm" width="50" height="50" style="object-fit: cover;">
+                
+                <div class="fw-bold text-dark text-truncate" style="font-size: 12px; max-width: 120px;">{{ node.full_name }}</div>
+                <div class="text-muted mb-1" style="font-size: 10px;">ID: {{ node.id }}</div>
+                <div class="text-warning fw-bold" style="font-size: 11px;">{{ node.rank | default('Member') }}</div>
+                <div class="text-success" style="font-size: 10px;"><i class="bi bi-telephone text-success me-1"></i>{{ node.phone | default('N/A') }}</div>
+            </div>
+            
+            {% set next_level = current_level + 1 %}
+            {% if team_tree and team_tree.get(next_level) %}
+                {% set children = team_tree[next_level] | selectattr('sponsor_id', 'equalto', node.id | string) | list %}
+                {% if not children %}{% set children = team_tree[next_level] | selectattr('sponsor_id', 'equalto', node.id | int) | list %}{% endif %}
+                {% if children %}
+                <ul>
+                    {% for child in children %}{{ render_node(child, next_level) }}{% endfor %}
+                </ul>
+                {% endif %}
+            {% endif %}
+        </li>
+        {% endmacro %}
+        <ul>{{ render_node(user, 0) }}</ul>
+    </div>
+</div>
+
+<!-- LIST VIEW CONTAINER -->
+<div id="listViewContainer" class="card border-0 shadow-sm rounded-4 bg-white mb-4 d-none">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="teamTable">
+                <thead class="bg-light text-muted small">
+                    <tr>
+                        <th class="ps-4">User</th>
+                        <th>ID / Ref</th>
+                        <th>Level</th>
+                        <th>Rank</th>
+                        <th>Status</th>
+                        <th>Joined</th>
+                        <th class="text-end pe-4">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if team_tree %}
+                        {% for level, members in team_tree.items() %}
+                            {% for m in members %}
+                            <tr>
+                                <td class="ps-4 fw-bold text-dark">{{ m.full_name }}</td>
+                                <td>ID: {{ m.id }}<br>Ref: {{ m.referral_code }}</td>
+                                <td>Level {{ level }}</td>
+                                <td>{{ m.rank | default('Member') }}</td>
+                                <td>{{ 'Active' if m.is_active else 'Inactive' }}</td>
+                                <td>{{ (m.created_at | string)[:10] if m.created_at else 'N/A' }}</td>
+                                <td class="text-end pe-4">
+                                    <a href="/admin/user/team/{{ m.id }}" class="btn btn-sm btn-outline-primary shadow-sm">Audit</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% endfor %}
+                    {% else %}
+                        <tr><td colspan="7" class="text-center py-4 text-muted">No team members found.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- AUDIT DRILL TRACKER (Clickable Breadcrumbs) -->
+<div class="card border-0 shadow-sm rounded-4 bg-white p-4 mb-4">
+    <div class="d-flex align-items-center gap-2 text-muted small mb-3">
+        <i class="bi bi-info-circle text-primary"></i> <span>Click on any user card in the tree above to drill down into their network.</span>
+    </div>
+    <div class="d-flex align-items-center flex-nowrap overflow-auto py-2 audit-flow">
+        <div class="text-center px-3 metric-hover" onclick="window.location.href='/admin/user/team/{{ user.id }}'" style="cursor: pointer;">
+            <div class="fw-bold text-dark small">Level 0</div>
+            <div class="text-primary small" style="font-size: 11px;">{{ user.full_name }} (You)</div>
+            <div class="text-muted" style="font-size: 10px;">ID: {{ user.id }}</div>
+        </div>
+        {% if team_tree %}
+            {% for level, members in team_tree.items() %}
+            <i class="bi bi-arrow-right text-muted opacity-50 px-2"></i>
+            <div class="text-center px-3">
+                <div class="fw-bold text-dark small">Level {{ level }}</div>
+                <div class="text-muted small" style="font-size: 11px;">{{ members|length }} Members</div>
+            </div>
+            {% endfor %}
+        {% endif %}
+    </div>
+</div>
+
+<!-- ENTERPRISE RIGHT DRAWER -->
+<div class="offcanvas offcanvas-end shadow-lg border-0" tabindex="-1" id="userDetailDrawer" style="width: 550px;">
+    <div class="offcanvas-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+        <h5 class="fw-bold mb-0 text-dark">User Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+    </div>
+    
+    <div class="offcanvas-body p-0 bg-light d-flex flex-column">
+        
+        <div id="drawerLoader" class="position-absolute w-100 h-100 bg-white d-flex justify-content-center align-items-center z-3 d-none">
+            <div class="spinner-border text-primary"></div>
+        </div>
+
+        <div class="bg-white p-4 text-center position-relative">
+            <img id="drawerAvatar" src="" class="rounded-circle shadow-sm border mb-2" width="70" height="70">
+            <h5 class="fw-bold mb-1 text-dark d-flex align-items-center justify-content-center gap-2">
+                <span id="drawerName">...</span>
+                <span id="drawerStatusBadge" class="badge" style="font-size: 9px;">...</span>
+            </h5>
+            <div class="text-muted small mb-1">ID: <span id="drawerId" class="text-dark"></span> &nbsp;&nbsp; Rank: <span id="drawerRank" class="text-warning"></span></div>
+            <div class="text-muted small mb-3">Joined On: <span id="drawerDate" class="text-dark"></span></div>
+        </div>
+        
+        <div class="bg-white px-2 border-bottom border-top">
+            <ul class="nav nav-tabs nav-tabs-custom border-0 d-flex justify-content-between text-center" id="drawerTabs" style="font-size: 12px;">
+                <li class="nav-item flex-fill"><a class="nav-link active fw-semibold" data-bs-toggle="tab" href="#overview">Overview</a></li>
+                <li class="nav-item flex-fill"><a class="nav-link fw-semibold" data-bs-toggle="tab" href="#business">Business</a></li>
+                <li class="nav-item flex-fill"><a class="nav-link fw-semibold text-muted" id="tabNetwork" href="#" target="_blank">Network</a></li>
+                <li class="nav-item flex-fill"><a class="nav-link fw-semibold text-muted" id="tabKyc" href="#">KYC & Docs</a></li>
+                <li class="nav-item flex-fill"><a class="nav-link fw-semibold text-muted" id="tabTransactions" href="#">Transactions</a></li>
+            </ul>
+        </div>
+        
+        <div class="tab-content p-4 flex-grow-1 overflow-auto bg-white">
+            <div class="tab-pane fade show active" id="overview">
+                <!-- Personal Info -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold text-dark mb-0">Personal Information</h6>
+                    <a id="drawerEditBtn" href="#" class="text-primary small text-decoration-none">Edit</a>
+                </div>
+                <div class="row g-2 small text-muted mb-4 pb-3 border-bottom">
+                    <div class="col-4"><i class="bi bi-person me-2"></i>Full Name</div><div class="col-8 text-dark" id="drawerFullName"></div>
+                    <div class="col-4"><i class="bi bi-envelope me-2"></i>Email</div><div class="col-8 text-dark" id="drawerEmail"></div>
+                    <div class="col-4"><i class="bi bi-phone me-2"></i>Mobile</div><div class="col-8 text-success" id="drawerPhone"></div>
+                    <div class="col-4"><i class="bi bi-telephone me-2"></i>Alt Mobile</div><div class="col-8 text-dark" id="drawerAltPhone"></div>
+                    <div class="col-4"><i class="bi bi-geo-alt me-2"></i>Address</div><div class="col-8 text-dark" id="drawerAddress"></div>
+                </div>
+
+                <!-- Sponsor Info -->
+                <h6 class="fw-bold text-dark mb-3 text-primary bg-light p-2 rounded">Sponsor / Upline Information</h6>
+                <div class="row g-2 small text-muted mb-4 pb-3 border-bottom">
+                    <div class="col-4">Sponsor ID</div><div class="col-8 text-dark" id="drawerSponsorId"></div>
+                    <div class="col-4">Sponsor Name</div><div class="col-8 text-dark" id="drawerSponsorName"></div>
+                    <div class="col-4">Sponsor Rank</div><div class="col-8 text-dark" id="drawerSponsorRank"></div>
+                    <div class="col-4">Sponsored On</div><div class="col-8 text-dark" id="drawerSponsoredOn"></div>
+                </div>
+
+                <!-- Referred By -->
+                <h6 class="fw-bold text-warning mb-3 bg-light p-2 rounded">Referred By</h6>
+                <div class="row g-2 small text-muted mb-4 pb-3 border-bottom">
+                    <div class="col-4">Referred By</div><div class="col-8 text-dark" id="drawerReferredBy"></div>
+                    <div class="col-4">Referred On</div><div class="col-8 text-dark" id="drawerReferredOn"></div>
+                </div>
+                
+                <!-- Business Information -->
+                <h6 class="fw-bold text-dark mb-3">Business Information</h6>
+                <div class="row g-3 small text-muted">
+                    <div class="col-6">
+                        <div class="row g-1"><div class="col-6">Active Plan</div><div class="col-6 text-dark">: <span id="drawerPlanName">N/A</span></div></div>
+                        <div class="row g-1"><div class="col-6">Plan Amount</div><div class="col-6 text-dark">: ₹<span id="drawerPlanAmount">0</span></div></div>
+                        <div class="row g-1"><div class="col-6">Total Purchases</div><div class="col-6 text-dark">: ₹<span id="drawerTotalPurchases">0</span></div></div>
+                        <div class="row g-1"><div class="col-6">Last Purchase</div><div class="col-6 text-dark">: <span id="drawerLastPurchase">N/A</span></div></div>
+                    </div>
+                    <div class="col-6">
+                        <div class="row g-1"><div class="col-6">Total Direct</div><div class="col-6 text-dark">: <span id="drawerTotalDirect">0</span></div></div>
+                        <div class="row g-1"><div class="col-6">Total Downline</div><div class="col-6 text-dark">: <span id="drawerTotalDownline">0</span></div></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="tab-pane fade" id="business">
+                <div id="planContainer">
+                    <div class="text-center py-4 text-muted small"><div class="spinner-border text-primary spinner-border-sm me-2"></div>Loading plans...</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer Buttons -->
+        <div class="p-3 border-top bg-light d-flex gap-2">
+            <button class="btn btn-primary flex-fill btn-sm shadow-sm" id="btnNewTabNetwork">Audit Drill Network</button>
+            <button class="btn btn-outline-secondary flex-fill btn-sm bg-white" id="btnViewTx">View Transactions</button>
+            <button class="btn btn-outline-success flex-fill btn-sm bg-white" id="btnSendMsg"><i class="bi bi-whatsapp"></i> Send Message</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.metric-hover:hover { transform: translateY(-3px); transition: 0.2s; border-color: #cbd5e1 !important;}
+.tree ul { padding-top: 30px; position: relative; transition: all 0.5s; display: flex; justify-content: center; padding-left: 0; margin-bottom: 0; }
+.tree li { float: left; text-align: center; list-style-type: none; position: relative; padding: 30px 10px 0 10px; transition: all 0.5s; }
+.tree li::before, .tree li::after { content: ''; position: absolute; top: 0; right: 50%; border-top: 2px solid #cbd5e1; width: 50%; height: 30px; }
+.tree li::after { right: auto; left: 50%; border-left: 2px solid #cbd5e1; }
+.tree li:only-child::after, .tree li:only-child::before { display: none; }
+.tree li:only-child { padding-top: 0; }
+.tree li:first-child::before, .tree li:last-child::after { border: 0 none; }
+.tree li:last-child::before { border-right: 2px solid #cbd5e1; border-radius: 0 5px 0 0; }
+.tree li:first-child::after { border-radius: 5px 0 0 0; }
+.tree ul ul::before { content: ''; position: absolute; top: 0; left: 50%; border-left: 2px solid #cbd5e1; width: 0; height: 30px; }
+.tree-node { padding: 15px; border-radius: 8px; display: inline-block; cursor: pointer; min-width: 140px; transition: all 0.3s ease; z-index: 2; position: relative; }
+.tree-node:hover { transform: translateY(-5px); box-shadow: 0 12px 20px -5px rgba(0,0,0,0.15) !important; border-color: #4f46e5 !important; }
+.nav-tabs-custom .nav-link { border: none; border-bottom: 2px solid transparent; color: #64748b; padding-bottom: 10px; padding-top: 10px;}
+.nav-tabs-custom .nav-link.active { color: #4f46e5; border-bottom: 2px solid #4f46e5; background: transparent; }
+</style>
+
+<script>
+    let drawer;
+
+    document.addEventListener("DOMContentLoaded", function() {
+        drawer = new bootstrap.Offcanvas(document.getElementById('userDetailDrawer'));
+    });
+
+    function toggleView(view) {
+        if(view === 'list') {
+            document.getElementById('treeViewContainer').classList.add('d-none');
+            document.getElementById('listViewContainer').classList.remove('d-none');
+            document.getElementById('btnListView').classList.replace('btn-white', 'btn-primary');
+            document.getElementById('btnTreeView').classList.replace('btn-primary', 'btn-white');
+        } else {
+            document.getElementById('treeViewContainer').classList.remove('d-none');
+            document.getElementById('listViewContainer').classList.add('d-none');
+            document.getElementById('btnTreeView').classList.replace('btn-white', 'btn-primary');
+            document.getElementById('btnListView').classList.replace('btn-primary', 'btn-white');
+        }
+    }
+
+    function exportTableToCSV(filename) {
+        let csv = [];
+        let rows = document.querySelectorAll("#teamTable tr");
+        for (let i = 0; i < rows.length; i++) {
+            let row = [], cols = rows[i].querySelectorAll("td, th");
+            for (let j = 0; j < cols.length - 1; j++) {
+                row.push('"' + cols[j].innerText.replace(/"/g, '""').replace(/\n/g, ' ') + '"');
+            }
+            if (cols.length > 0) csv.push(row.join(","));
+        }
+        let csvFile = new Blob([csv.join("\n")], {type: "text/csv"});
+        let downloadLink = document.createElement("a");
+        downloadLink.download = filename;
+        downloadLink.href = window.URL.createObjectURL(csvFile);
+        downloadLink.style.display = "none";
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+    }
+
+    async function openDrawer(element) {
+        const dataset = element.dataset;
+        const userId = dataset.id;
+        
+        // 1. Instantly populate core known data to UI to prevent empty blanks
+        document.getElementById('drawerName').innerText = dataset.name;
+        document.getElementById('drawerFullName').innerText = dataset.name;
+        document.getElementById('drawerId').innerText = userId;
+        document.getElementById('drawerAvatar').src = element.querySelector('img').src;
+        
+        const statusBadge = document.getElementById('drawerStatusBadge');
+        statusBadge.innerText = dataset.status;
+        statusBadge.className = dataset.status === 'Active' ? 'badge bg-success text-white' : 'badge bg-danger text-white';
+        
+        // 2. Instantly link all tabs and buttons (Fixes unclickable tabs)
+        document.getElementById('tabNetwork').href = `/admin/user/team/${userId}`;
+        document.getElementById('tabTransactions').href = `/admin/user/transactions/${userId}`;
+        document.getElementById('tabKyc').href = `/admin/kyc/view/${userId}`;
+        document.getElementById('drawerEditBtn').href = `/admin/users/edit/${userId}`;
+        
+        document.getElementById('btnNewTabNetwork').onclick = () => window.open(`/admin/user/team/${userId}`, '_blank');
+        document.getElementById('btnViewTx').onclick = () => window.location.href = `/admin/user/transactions/${userId}`;
+        document.getElementById('btnSendMsg').onclick = () => window.open(`https://wa.me/`, '_blank'); 
+
+        // 3. Clear old data from previous clicks
+        document.getElementById('drawerRank').innerText = '...';
+        document.getElementById('drawerDate').innerText = '...';
+        document.getElementById('planContainer').innerHTML = '<div class="text-center py-4 text-muted small"><div class="spinner-border text-primary spinner-border-sm me-2"></div>Loading plans...</div>';
+        
+        // Open the drawer immediately
+        drawer.show();
+
+        // 4. Fetch the detailed dynamic data from backend
+        try {
+            const response = await fetch(`/admin/user/${userId}/drawer_data`);
+            if(!response.ok) throw new Error("API Route Missing or Server Error");
+            const data = await response.json();
+            
+            if(data.status === 'success') {
+                const u = data.user;
+                
+                document.getElementById('drawerRank').innerText = u.rank || 'N/A';
+                document.getElementById('drawerDate').innerText = u.created_at || 'N/A';
+                
+                document.getElementById('drawerEmail').innerText = u.email || 'N/A';
+                document.getElementById('drawerPhone').innerText = u.phone || 'N/A';
+                document.getElementById('drawerAltPhone').innerText = u.alternate_phone || 'N/A';
+                document.getElementById('drawerAddress').innerText = u.address || 'N/A';
+                
+                // Sponsor & Referrer
+                const sName = u.sponsor_name || 'N/A';
+                const sId = u.sponsor_id || 'Root';
+                document.getElementById('drawerSponsorId').innerText = sId;
+                document.getElementById('drawerSponsorName').innerText = sName;
+                document.getElementById('drawerSponsorRank').innerText = u.sponsor_rank || 'N/A';
+                document.getElementById('drawerSponsoredOn').innerText = u.sponsor_date || 'N/A';
+                document.getElementById('drawerReferredBy').innerText = sId !== 'Root' ? `${sName} (ID: ${sId})` : 'N/A';
+                document.getElementById('drawerReferredOn').innerText = u.created_at || 'N/A';
+                
+                // Network Counts
+                document.getElementById('drawerTotalDirect').innerText = data.directs || 0;
+                document.getElementById('drawerTotalDownline').innerText = data.downline || 0;
+                
+                // Update Whatsapp button with actual phone
+                document.getElementById('btnSendMsg').onclick = () => {
+                    if (u.phone) window.open(`https://wa.me/${u.phone}`, '_blank');
+                };
+
+                // Purchases Tab rendering
+                if(data.purchases && data.purchases.length > 0) {
+                    const latest = data.purchases[0];
+                    document.getElementById('drawerPlanName').innerText = latest.package_name;
+                    document.getElementById('drawerPlanAmount').innerText = latest.price;
+                    document.getElementById('drawerLastPurchase').innerText = latest.created_at;
+                    
+                    let totalAmt = 0;
+                    let html = '';
+                    data.purchases.forEach(p => {
+                        totalAmt += parseFloat(p.price || 0);
+                        html += `
+                        <div class="card border-0 shadow-sm rounded-3 mb-3 bg-white">
+                            <div class="card-body p-3 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="fw-bold text-dark">${p.package_name}</div>
+                                    <div class="text-muted small mt-1"><i class="bi bi-calendar-event me-1"></i> ${p.created_at}</div>
+                                </div>
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">${p.status}</span>
+                            </div>
+                        </div>`;
+                    });
+                    document.getElementById('drawerTotalPurchases').innerText = totalAmt;
+                    document.getElementById('planContainer').innerHTML = html;
+                } else {
+                    document.getElementById('drawerPlanName').innerText = 'N/A';
+                    document.getElementById('drawerPlanAmount').innerText = '0';
+                    document.getElementById('drawerLastPurchase').innerText = 'N/A';
+                    document.getElementById('drawerTotalPurchases').innerText = '0';
+                    document.getElementById('planContainer').innerHTML = '<div class="alert alert-light border text-center py-4 text-muted shadow-sm rounded-3">No plans purchased yet.</div>';
+                }
+            }
+        } catch(e) {
+            console.error(e);
+            document.getElementById('planContainer').innerHTML = '<div class="alert alert-danger mt-2 small shadow-sm rounded-3">Failed to connect to backend API for details.</div>';
+        }
+    }
+</script>
+{% endblock %}
